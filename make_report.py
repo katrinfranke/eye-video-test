@@ -90,6 +90,29 @@ contrast = {
                    "per_session": eye_u},
 }
 
+# 6b) eye closure: pupil-size examples + closed fraction by condition
+ev.show_pupil_sizes(centered + biased, n=N, high=HIGH)
+plt.savefig(f"{FIG}/pupil_sizes.png", dpi=110, bbox_inches="tight"); plt.close("all")
+cf = {d: v["closed_fraction"] for d, v in ev.closed_fraction(centered + biased, n=N, high=HIGH).items()}
+ev.compare_closure(centered, biased, n=N, high=HIGH)
+plt.savefig(f"{FIG}/closure_fraction.png", dpi=110, bbox_inches="tight"); plt.close("all")
+_, ct, cp = ev._group_test([[cf[d] for d in centered], [cf[d] for d in biased]])
+closure = {"per_session": {d: cf[d] for d in centered + biased},
+           "centered_mean": float(np.mean([cf[d] for d in centered])),
+           "biased_mean": float(np.mean([cf[d] for d in biased])),
+           "welch_t": ct, "welch_p": cp, "min_dark": ev.MIN_DARK, "max_dark": ev.MAX_DARK}
+log("closure figures done")
+
+# 6c) open-only eye-frame comparison (drop invalid/closed frames)
+res_open = ev.compare_conditions(centered, biased, n=N, high=HIGH, open_only=True)
+plt.close("all")
+open_welch = {}
+for tr in ["ell", "onl"]:
+    for ax in ["u", "v"]:
+        _, st, p = ev._group_test([res_open["daysum"]["centered"][tr][ax], res_open["daysum"]["biased"][tr][ax]])
+        open_welch[f"{tr}/{ax}"] = {"t": st, "p": p}
+log("open-only comparison done")
+
 # 7) session-level Welch tests per tracker/axis
 welch = {}
 for tr in ["ell", "onl"]:
@@ -106,8 +129,10 @@ out = {
     "per_session": [{"cond": r[0], "date": r[1], "u_rob": r[2], "v_rob": r[3],
                      "u_onl": r[4], "v_onl": r[5], "n": r[6]} for r in perday],
     "welch_session_level": welch,
+    "welch_session_level_open_only": open_welch,
     "tracker_agreement": agree,
     "image_vs_eyeframe": contrast,
+    "closure": closure,
 }
 json.dump(out, open("results.json", "w"), indent=2)
 log("wrote results.json and figures/. DONE")

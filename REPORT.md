@@ -82,6 +82,24 @@ Per-session mean pupil `x`, compared two ways:
 
 The between-condition difference appears in the pupil position referenced to the eye, not in the raw normalized image x. (The raw image measure is confounded by per-session crop and resolution and is reported only for contrast.)
 
+## Result 5 — eye closure and frame validity
+
+The two trackers diverge mainly on near-closed frames (Result 1). We flag closure using the online tracker's own validity rule: the dark-pixel count feeding the centroid (`ndark`) must lie in **[300, 40000]**; frames outside that range, or with no detected pupil, are treated as closed/invalid.
+
+Example frames across the `ndark` distribution confirm the threshold: `ndark` < 300 frames are fully closed (only scattered lash pixels); `ndark` ≈ 300–800 are half-closed with the pupil just emerging; the pupil is clearly open by `ndark` ≈ 1500+. The upper bound (40000) is never reached here (max ≈ 28000). So **300 is a sound floor for "fully closed" but lenient** — some half-closed frames pass it. Red = the pixels contributing to the online centroid.
+
+![Frames across pupil size](figures/pupil_sizes.png)
+
+Per-session eye-closed fraction, by condition:
+
+- centered mean 7.9% (median 3.7%), biased mean 3.2% (median 3.0%); Welch p = 0.36.
+- The centered mean is inflated by one session (2026-03-02, 36% closed); every other session is 2–5%.
+- No significant difference in eye-closed fraction between conditions.
+
+![Eye-closed fraction by condition](figures/closure_fraction.png)
+
+Excluding closed/invalid frames (open-only) leaves the horizontal effect unchanged (robust `u` p = 0.012, online `u` p = 0.014) — so it is not driven by closed or half-closed frames.
+
 ## Per-session eye-frame position (mean over frames)
 
 `u` = horizontal (−1..+1, 0 = centered), `v` = vertical. `rob` = robust ellipse, `onl` = online.
@@ -105,7 +123,7 @@ The between-condition difference appears in the pupil position referenced to the
 
 ## Conclusion
 
-Horizontal pupil position in eye-based coordinates is shifted on biased days relative to centered days (robust t = 3.01, p = 0.012; online t = 2.92, p = 0.014); vertical position is unchanged. The shift is present in **both** the offline (robust ellipse) and online (threshold-centroid) estimates, which are highly correlated (per-frame r = 0.99); the two estimates diverge mainly on near-closed-eye frames (Result 1), not on the open-eye frames that dominate each session's mean. The day-to-day difference therefore reflects a **real shift in horizontal pupil position within the eye**, seen regardless of which tracker is used, rather than something specific to the online pupil-detection step. Provided the gaze calibration is accurate, the estimated monitor gaze coordinates reflect this real shift.
+Horizontal pupil position in eye-based coordinates is shifted on biased days relative to centered days (robust t = 3.01, p = 0.012; online t = 2.92, p = 0.014); vertical position is unchanged. The shift is present in **both** the offline (robust ellipse) and online (threshold-centroid) estimates, which are highly correlated (per-frame r = 0.99); the two estimates diverge mainly on near-closed-eye frames (Result 1), not on the open-eye frames that dominate each session's mean. The day-to-day difference therefore reflects a **real shift in horizontal pupil position within the eye**, seen regardless of which tracker is used, rather than something specific to the online pupil-detection step. It is unchanged when closed/invalid frames are excluded (Result 5), and eye-closed fraction does not differ between conditions. Provided the gaze calibration is accurate, the estimated monitor gaze coordinates reflect this real shift.
 
 ## Limitations
 

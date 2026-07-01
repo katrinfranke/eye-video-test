@@ -205,28 +205,34 @@ def track_both(session_dir, n=120, high=50.0, use_cache=True):
     cp = _cache_path(session_dir, n, high)
     if use_cache and os.path.exists(cp):
         z = np.load(cp)
-        r = dict(ell=z["ell"], onl=z["onl"], t=z["t"], n=int(z["n"]), W=int(z["W"]), H=int(z["H"]),
-                 mean=(z["mean"] if z["mean"].size else None))
-        _TRK[key] = r
-        return r
-    total, _ = session_duration(session_dir); acc = None; PE = []; PO = []; T = []
+        if "ndark" in z.files:      # else fall through and recompute (older cache lacks openness fields)
+            r = dict(ell=z["ell"], onl=z["onl"], t=z["t"], ndark=z["ndark"],
+                     n=int(z["n"]), n_tried=int(z["n_tried"]), W=int(z["W"]), H=int(z["H"]),
+                     mean=(z["mean"] if z["mean"].size else None))
+            _TRK[key] = r
+            return r
+    total, _ = session_duration(session_dir); acc = None; PE = []; PO = []; T = []; ND = []
     for t in np.linspace(0, total, n, endpoint=False):
         g = grab_frame(session_dir, t)
         if g is None: continue
         d = detect_pupil(g)
         if d is None: continue
-        ox, oy = get_pupil_online(g, 0.0, high)
-        if ox is None: continue
+        mask = online_mask(g, 0.0, high)
+        mo = cv2.moments(mask)
+        if mo["m00"] == 0: continue
+        ox, oy = mo["m10"]/mo["m00"], mo["m01"]/mo["m00"]
         if acc is None: acc = np.zeros(g.shape, float)
         if g.shape != acc.shape: continue
         acc += g; PE.append((d["cx"], d["cy"])); PO.append((ox, oy)); T.append(t)
+        ND.append(int((mask > 0).sum()))       # dark pixels feeding the online centroid
     W, H = frame_size(session_dir)
     mean = (acc/len(PE)).astype(np.uint8) if PE else None
     r = dict(ell=np.array(PE, float).reshape(-1, 2), onl=np.array(PO, float).reshape(-1, 2),
-             t=np.array(T, float), n=len(PE), W=W, H=H, mean=mean)
+             t=np.array(T, float), ndark=np.array(ND, float), n=len(PE), n_tried=n, W=W, H=H, mean=mean)
     if use_cache:
         os.makedirs(CACHE_DIR, exist_ok=True)
-        np.savez_compressed(cp, ell=r["ell"], onl=r["onl"], t=r["t"], n=r["n"], W=r["W"], H=r["H"],
+        np.savez_compressed(cp, ell=r["ell"], onl=r["onl"], t=r["t"], ndark=r["ndark"],
+                            n=r["n"], n_tried=r["n_tried"], W=r["W"], H=r["H"],
                             mean=(mean if mean is not None else np.array([], np.uint8)))
     _TRK[key] = r
     return r
@@ -240,6 +246,84 @@ def track_dates(dates, n=200, high=50.0):
         out[d] = r
         print(f"{d}: {r['n']}/{n} frames with pupil")
     return out
+
+# ---------------------------------------------------------------- eye closure / openness
+# online-tracker validity range for the dark-pixel count (production rule)
+MIN_DARK, MAX_DARK = 300, 40000
+
+def open_frames(r, min_dark=MIN_DARK, max_dark=MAX_DARK):
+    """Boolean mask over r's detected frames: eye 'open'/valid where the online dark-pixel count
+    (ndark) is within [min_dark, max_dark] (the online tracker's validity range). Below min_dark =
+    pupil occluded (eye closing)."""
+    if r["n"] == 0:
+        return np.zeros(0, bool)
+    return (r["ndark"] >= min_dark) & (r["ndark"] <= max_dark)
+
+def closed_fraction(dates, n=1000, high=50.0, min_dark=MIN_DARK, max_dark=MAX_DARK, landmarks=None):
+    """Per session: fraction of sampled frames that are eye-closed / online-invalid. A frame counts
+    as closed if no pupil was detected (dropped during tracking) OR its online dark-pixel count is
+    outside [min_dark, max_dark]. Returns {date: dict(n_tried, n_open, closed_fraction)}."""
+    out = {}
+    for d in dates:
+        r = track_both(session_for_date(d), n, high)
+        n_open = int(open_frames(r, min_dark, max_dark).sum())
+        out[d] = dict(n_tried=r["n_tried"], n_open=n_open,
+                      closed_fraction=1.0 - n_open / r["n_tried"])
+    return out
+
+def show_pupil_sizes(dates, targets=None, n=1000, high=50.0, cols=5):
+    """Example frames spanning the pupil-size (dark-pixel count) distribution, with the online
+    contributing pixels (red) overlaid — to sanity-check the validity threshold. For each target
+    ndark value the nearest-matching frame across `dates` is shown."""
+    if isinstance(dates, str): dates = [dates]
+    pool = []
+    for d in dates:
+        s = session_for_date(d); r = track_both(s, n, high)
+        for i in range(r["n"]):
+            pool.append((float(r["ndark"][i]), s, float(r["t"][i])))
+    nd = np.array([p[0] for p in pool])
+    if targets is None:
+        targets = [30, 100, 200, 300, 450, 700, 1500, 4000, 9000, int(np.percentile(nd, 99))]
+    rows = int(np.ceil(len(targets) / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(cols*3.0, rows*2.7), squeeze=False)
+    for ax, tg in zip(axes.ravel(), targets):
+        j = int(np.argmin(np.abs(nd - tg))); _, s, t = pool[j]
+        g = grab_frame(s, t)
+        ax.imshow(g, cmap="gray", vmin=0, vmax=255)
+        ax.imshow(_mask_overlay_rgba(online_mask(g, 0.0, high)))
+        valid = MIN_DARK <= nd[j] <= MAX_DARK
+        ax.set_title(f"ndark={int(nd[j])}" + ("" if valid else "  (invalid)"),
+                     fontsize=8, color=("black" if valid else "red"))
+        ax.set_xticks([]); ax.set_yticks([])
+    for ax in axes.ravel()[len(targets):]:
+        ax.axis("off")
+    fig.suptitle(f"Frames across dark-pixel count (red = contributing pixels); online-valid range [{MIN_DARK}, {MAX_DARK}]", fontsize=10)
+    plt.tight_layout(rect=[0, 0, 1, 0.96]); plt.show()
+
+def compare_closure(centered=None, biased=None, conditions=None, n=1000, high=50.0,
+                    min_dark=MIN_DARK, max_dark=MAX_DARK):
+    """Per-session eye-closed fraction, compared between conditions (strip plot + Welch t-test)."""
+    if conditions is None:
+        conditions = {"centered": centered or [], "biased": biased or []}
+    names = list(conditions)
+    colors = {nm: COND_PALETTE[i % len(COND_PALETTE)] for i, nm in enumerate(names)}
+    fracs = {nm: [closed_fraction([d], n, high, min_dark, max_dark)[d]["closed_fraction"] for d in conditions[nm]]
+             for nm in names}
+    fig, ax = plt.subplots(figsize=(5, 4.5))
+    for i, nm in enumerate(names):
+        y = np.array(fracs[nm]) * 100
+        ax.plot(np.full(len(y), i) + np.linspace(-0.08, 0.08, len(y)), y, "o", color=colors[nm])
+        ax.hlines(y.mean(), i - 0.2, i + 0.2, color=colors[nm], lw=2)
+    ax.set_xticks(range(len(names))); ax.set_xticklabels(names)
+    ax.set_ylabel("eye-closed frames (%)"); ax.set_title("Eye-closed fraction by condition")
+    plt.tight_layout(); plt.show()
+    for nm in names:
+        f = np.array(fracs[nm]) * 100
+        print(f"{nm:<9} closed% per session: {np.round(f,1).tolist()}  mean={f.mean():.1f}%")
+    if len(names) == 2:
+        lab, st, p = _group_test([fracs[names[0]], fracs[names[1]]])
+        print(f"{lab} on per-session closed fraction: stat={st:.3f} p={p:.4g}")
+    return fracs
 
 # ---------------------------------------------------------------- eye-anchored frame
 def eye_frame(pts):
@@ -651,7 +735,8 @@ def compare_agreement(centered=None, biased=None, conditions=None, n=120, high=5
     return dict(perframe=pf, daymedian=dday)
 
 def compare_conditions(centered=None, biased=None, conditions=None,
-                       n=120, high=50.0, bins=60, summary="mean", landmarks=None):
+                       n=120, high=50.0, bins=60, summary="mean", landmarks=None,
+                       open_only=False, min_dark=MIN_DARK, max_dark=MAX_DARK):
     """Compare eye-frame pupil position between conditions, for both trackers and both axes
     (u = horizontal / eye-frame x, v = vertical / eye-frame y).
 
@@ -679,9 +764,10 @@ def compare_conditions(centered=None, biased=None, conditions=None,
             if d not in LM:
                 raise ValueError(f"no landmarks for {d} - clicker_if_missing('{d}') first")
             r = track_both(session_for_date(d), n, high); F = eye_frame(LM[d])
+            sel = open_frames(r, min_dark, max_dark) if open_only else np.ones(r["n"], bool)
             row = [nm, d]
             for tr, _ in trackers:
-                uv = np.array([to_eye(p, F) for p in r[tr]]).reshape(-1, 2)
+                uv = np.array([to_eye(p, F) for p in r[tr][sel]]).reshape(-1, 2)
                 pooled[nm][tr]["u"] += list(uv[:, 0]); pooled[nm][tr]["v"] += list(uv[:, 1])
                 su, sv = float(agg(uv[:, 0])), float(agg(uv[:, 1]))
                 daysum[nm][tr]["u"].append(su); daysum[nm][tr]["v"].append(sv)

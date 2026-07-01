@@ -11,3 +11,6 @@ __pycache__/
 
 # cached pupil tracking (regenerated on demand)
 .track_cache/
+
+# transient run log
+report_run.log

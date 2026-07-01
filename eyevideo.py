@@ -589,7 +589,7 @@ def compare_conditions(centered=None, biased=None, conditions=None,
     if conditions is None:
         conditions = {"centered": centered or [], "biased": biased or []}
     names = list(conditions)
-    palette = ["tab:green", "tab:red", "tab:blue", "tab:purple", "tab:orange"]
+    palette = ["black", "red", "tab:blue", "tab:purple", "tab:orange"]
     colors = {nm: palette[i % len(palette)] for i, nm in enumerate(names)}
     trackers = [("ell", "robust ellipse"), ("onl", "online centroid")]
     AX = [("u", 0, "horizontal (eye-frame x)"), ("v", 1, "vertical (eye-frame y)")]
@@ -613,10 +613,12 @@ def compare_conditions(centered=None, biased=None, conditions=None,
     fig, ax = plt.subplots(2, 2, figsize=(13, 9))
     for i, (tr, tlab) in enumerate(trackers):
         for ax_key, j, alab in AX:
+            ax[i][j].axvline(0, color="0.6", ls=":", lw=1)      # eye-center reference
             for nm in names:
-                ax[i][j].hist(pooled[nm][tr][ax_key], bins=bins, range=(-1, 1), alpha=0.5,
-                              color=colors[nm], label=nm, density=True)
-            ax[i][j].axvline(0, color="k", ls=":")
+                ax[i][j].hist(pooled[nm][tr][ax_key], bins=bins, range=(-1, 1), histtype="step",
+                              lw=1.6, color=colors[nm], label=nm, density=True)
+                for sv in daysum[nm][tr][ax_key]:               # per-session mean
+                    ax[i][j].axvline(sv, color=colors[nm], lw=0.7, alpha=0.55)
             ax[i][j].set_title(f"{tlab}: {alab}"); ax[i][j].legend(fontsize=8)
             ax[i][j].set_xlabel("pupil position in eye frame (-1 .. +1, 0 = centered)")
             ax[i][j].set_ylabel("density")

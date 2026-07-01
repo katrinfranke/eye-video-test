@@ -7,7 +7,7 @@ import numpy as np
 import eyevideo as ev
 
 ev.ANIMAL_DIR = "/mnt/at-storageB1_I/EyeVideo/AT-B1NO1"
-N = 500
+N = 1000
 HIGH = 50.0
 centered = ['2026-05-27', '2026-04-30', '2026-06-11', '2026-06-09', '2026-03-02', '2026-02-04', '2026-02-13']
 biased   = ['2026-06-04', '2026-05-20', '2026-05-12', '2026-04-17', '2026-03-19', '2026-04-13', '2026-04-07']
@@ -27,6 +27,11 @@ plt.savefig(f"{FIG}/eyeframe_histograms.png", dpi=110, bbox_inches="tight"); plt
 log("compare_conditions done")
 
 daysum = res["daysum"]; perday = res["perday"]
+
+# 3b) example frames with ellipse + cross (2 centered + 2 biased sessions)
+ev.show_tracking_examples([centered[0], centered[3], biased[0], biased[3]], k=5)
+plt.savefig(f"{FIG}/tracking_examples.png", dpi=110, bbox_inches="tight"); plt.close("all")
+log("tracking_examples figure done")
 
 # 4) tracker discrepancy by condition + figure
 ev.compare_agreement(centered, biased, n=N, high=HIGH)

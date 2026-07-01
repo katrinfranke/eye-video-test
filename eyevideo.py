@@ -175,7 +175,7 @@ def track_both(session_dir, n=120, high=50.0):
     key = (session_dir, n, high)
     if key in _TRK:
         return _TRK[key]
-    total, _ = session_duration(session_dir); acc = None; PE = []; PO = []
+    total, _ = session_duration(session_dir); acc = None; PE = []; PO = []; T = []
     for t in np.linspace(0, total, n, endpoint=False):
         g = grab_frame(session_dir, t)
         if g is None: continue
@@ -185,9 +185,9 @@ def track_both(session_dir, n=120, high=50.0):
         if ox is None: continue
         if acc is None: acc = np.zeros(g.shape, float)
         if g.shape != acc.shape: continue
-        acc += g; PE.append((d["cx"], d["cy"])); PO.append((ox, oy))
+        acc += g; PE.append((d["cx"], d["cy"])); PO.append((ox, oy)); T.append(t)
     W, H = frame_size(session_dir)
-    r = dict(ell=np.array(PE), onl=np.array(PO), n=len(PE), W=W, H=H,
+    r = dict(ell=np.array(PE), onl=np.array(PO), t=np.array(T), n=len(PE), W=W, H=H,
              mean=(acc/len(PE)).astype(np.uint8) if PE else None)
     _TRK[key] = r
     return r
@@ -226,17 +226,63 @@ def show_mean_grid(date, n=120):
     ax.set_xticks(np.arange(0, W, 50)); ax.set_yticks(np.arange(0, H, 50))
     ax.grid(True, color="lime", lw=0.4, alpha=0.6); ax.set_title(f"{date}  {W}x{H}"); plt.show()
 
-def click_landmarks(date, n_points=8, n=120):
-    """Click n_points around the eye opening on the mean image; saved to eye_landmarks.json.
-    Needs an interactive backend: run  %matplotlib widget  (or qt) in a cell first."""
-    r = track_both(session_for_date(date), n)
-    if r["mean"] is None:
-        raise ValueError("no pupil frames for " + date)
-    fig, ax = plt.subplots(figsize=(10, 7)); ax.imshow(r["mean"], cmap="gray", vmin=0, vmax=255)
-    ax.set_title(f"{date}: click {n_points} points around the eye opening, then press Enter")
-    pts = plt.ginput(n_points, timeout=0); plt.close(fig)
-    LANDMARKS[date] = [(float(x), float(y)) for x, y in pts]; save_landmarks(LANDMARKS)
-    print(f"saved {len(pts)} landmarks for {date}"); return LANDMARKS[date]
+class LandmarkClicker:
+    """Interactive, non-blocking landmark clicker (works with %matplotlib widget / ipympl).
+
+    Usage in a notebook:
+        %matplotlib widget
+        clk = ev.LandmarkClicker(DATE)   # click >=5 points around the eye opening
+        # ...click on the figure; left-click add, right-click undo last...
+        clk.save()                       # writes to eye_landmarks.json
+        %matplotlib inline
+    """
+    def __init__(self, date, n=120):
+        r = track_both(session_for_date(date), n)
+        if r["mean"] is None:
+            raise ValueError("no pupil frames for " + date)
+        self.date = date; self.pts = []
+        self.fig, self.ax = plt.subplots(figsize=(10, 7))
+        self.ax.imshow(r["mean"], cmap="gray", vmin=0, vmax=255)
+        self.ax.set_title(f"{date}: left-click points around the eye opening (>=5), "
+                          f"right-click to undo, then clk.save()")
+        self.marks, = self.ax.plot([], [], "r+-", ms=10, lw=0.8)
+        self.fig.canvas.mpl_connect("button_press_event", self._onclick)
+
+    def _onclick(self, e):
+        if e.inaxes is not self.ax or e.xdata is None:
+            return
+        if e.button == 3 and self.pts:          # right-click: undo
+            self.pts.pop()
+        elif e.button == 1:                      # left-click: add
+            self.pts.append((float(e.xdata), float(e.ydata)))
+        xs = [p[0] for p in self.pts] + ([self.pts[0][0]] if len(self.pts) > 2 else [])
+        ys = [p[1] for p in self.pts] + ([self.pts[0][1]] if len(self.pts) > 2 else [])
+        self.marks.set_data(xs, ys)
+        self.ax.set_title(f"{self.date}: {len(self.pts)} points  (clk.save() when done)")
+        self.fig.canvas.draw_idle()
+
+    def save(self):
+        if len(self.pts) < 3:
+            raise ValueError("click at least 3 points first")
+        LANDMARKS[self.date] = list(self.pts); save_landmarks(LANDMARKS)
+        print(f"saved {len(self.pts)} landmarks for {self.date}"); return LANDMARKS[self.date]
+
+def set_landmarks(date, points):
+    """Manual fallback (no clicking): set landmarks read off show_mean_grid(date)."""
+    LANDMARKS[date] = [(float(x), float(y)) for x, y in points]; save_landmarks(LANDMARKS)
+    print(f"saved {len(points)} landmarks for {date}"); return LANDMARKS[date]
+
+def has_landmarks(date):
+    return date in LANDMARKS and len(LANDMARKS[date]) >= 3
+
+def clicker_if_missing(date, n=120):
+    """Return a LandmarkClicker only if `date` has no landmarks yet; else None (skip clicking).
+    Use as:  clk = ev.clicker_if_missing(DATE);  then  clk and clk.save()."""
+    if has_landmarks(date):
+        print(f"landmarks already exist for {date} ({len(LANDMARKS[date])} pts) - skipping clicking")
+        return None
+    print(f"no landmarks for {date} - click >=5 points, then clk.save()")
+    return LandmarkClicker(date, n)
 
 def show_landmarks(date, n=120):
     """Overlay saved landmarks + eye-frame axes on the mean image to verify them."""
@@ -248,6 +294,50 @@ def show_landmarks(date, n=120):
     ax.set_title(f"{date} eye frame (red=u, green=v)"); ax.set_xticks([]); ax.set_yticks([]); plt.show()
 
 # ---------------------------------------------------------------- QC & analysis plots
+def plot_pupil_xy(date, n=1000, high=50.0):
+    """Pupil x and y over the session for n equally-spaced frames, both trackers."""
+    r = track_both(session_for_date(date), n, high)
+    if r["n"] == 0:
+        raise ValueError("no pupil detected for " + date)
+    tm = r["t"] / 60.0
+    fig, ax = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+    ax[0].plot(tm, r["ell"][:, 0], ".", ms=3, c="tab:cyan", label="robust ellipse")
+    ax[0].plot(tm, r["onl"][:, 0], ".", ms=3, c="tab:orange", label="online centroid")
+    ax[0].set_ylabel("pupil x (px)"); ax[0].legend(fontsize=8)
+    ax[0].set_title(f"{date}  {r['n']}/{n} frames with pupil")
+    ax[1].plot(tm, r["ell"][:, 1], ".", ms=3, c="tab:cyan")
+    ax[1].plot(tm, r["onl"][:, 1], ".", ms=3, c="tab:orange")
+    ax[1].set_ylabel("pupil y (px)"); ax[1].set_xlabel("time (min)")
+    plt.tight_layout(); plt.show()
+    return r
+
+def tracker_agreement(dates, n=120, high=50.0):
+    """Scatter the two trackers against each other per frame: ellipse-x vs online-x and
+    ellipse-y vs online-y (dashed = identity). Tight scatter on the line = the online
+    centroid faithfully follows the pupil."""
+    if isinstance(dates, str):
+        dates = [dates]
+    data = [(d, track_both(session_for_date(d), n, high)) for d in dates]
+    data = [(d, r) for d, r in data if r["n"] > 0]
+    fig, ax = plt.subplots(1, 2, figsize=(11, 5))
+    for j, lab in enumerate(["x", "y"]):
+        vals = []
+        for d, r in data:
+            e = r["ell"][:, j]; o = r["onl"][:, j]
+            ax[j].scatter(e, o, s=10, alpha=0.5, label=d); vals += list(e) + list(o)
+        if vals:
+            lo, hi = min(vals), max(vals); ax[j].plot([lo, hi], [lo, hi], "k--", lw=1)
+        ax[j].set_xlabel(f"ellipse {lab} (px)"); ax[j].set_ylabel(f"online {lab} (px)")
+        ax[j].set_title(f"pupil {lab}: robust vs online"); ax[j].set_aspect("equal", "box")
+        ax[j].legend(fontsize=7)
+    plt.tight_layout(); plt.show()
+    for d, r in data:
+        rx = np.corrcoef(r["ell"][:, 0], r["onl"][:, 0])[0, 1]
+        ry = np.corrcoef(r["ell"][:, 1], r["onl"][:, 1])[0, 1]
+        mdx = np.median(np.abs(r["ell"][:, 0] - r["onl"][:, 0]))
+        mdy = np.median(np.abs(r["ell"][:, 1] - r["onl"][:, 1]))
+        print(f"{d}: corr x={rx:.3f} y={ry:.3f}  median|Δx|={mdx:.1f}px |Δy|={mdy:.1f}px  n={r['n']}")
+
 def show_tracking_examples(dates, k=5, high=50.0, search=40):
     """Rows = dates, cols = k example open-eye frames with both trackers overlaid."""
     if isinstance(dates, str): dates = [dates]

@@ -45,8 +45,8 @@ a shape-based ellipse detector on the same frames; agreement means the online tr
 ## Requirements
 
 - `ffmpeg` / `ffprobe` on `PATH`
-- Python: `numpy`, `opencv-python`, `matplotlib`, and Jupyter (`ipython`)
-- For clicking landmarks: an interactive matplotlib backend (`%matplotlib widget` or `qt`)
+- Python: `numpy`, `opencv-python`, `matplotlib`, Jupyter (`ipython`)
+- For clicking landmarks: `ipympl` (`pip install ipympl`), then `%matplotlib widget`
 
 ## Landmarks
 

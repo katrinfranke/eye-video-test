@@ -15,6 +15,12 @@ Days labeled "biased" (from the online gaze estimate) show gaze offset to one si
 - **Eye-anchored frame** (`eye_frame`): per session, ≥5 landmarks clicked around the eye opening; PCA gives the horizontal axis `u` (along the fissure) and vertical axis `v`, normalized so ±1 = the landmark extent, 0 = center. The pupil center is projected into this frame, giving a measure invariant to image crop, translation, and zoom.
 - Per session, each axis is summarized by the **mean** over frames. The independent unit is the session; conditions are compared with a **Welch t-test on the 7 per-session means** (`_group_test`). A frame-level t-test is computed for reference only and is not used for inference (frames within a session are correlated → pseudo-replication).
 
+## Eye-based coordinate frame
+
+Four example sessions (two centered, two biased): mean eye image, clicked landmarks (yellow), and the eye-frame axes — `u` horizontal (red), `v` vertical (green).
+
+![Eye-frame coordinate system on four sessions](figures/eyeframe_coordinates.png)
+
 ## Detection quality
 
 Example frames from four sessions (two centered, two biased): robust ellipse (cyan outline + center `+`) and online centroid (orange `×`).
@@ -46,7 +52,7 @@ Mean of the 7 per-session means, and Welch t-test on the per-session means (df �
 
 Biased days sit ~0.04 more negative in `u` (toward one corner), consistent across both trackers; the effect is horizontal only, and the standardized effect size for `u` is large (Cohen's d ≈ 1.6). The two tracker rows are not independent (r = 0.99); effectively this is two axis tests — horizontal significant, vertical null.
 
-In the histograms below, black = centered, red = biased; thin vertical lines mark each session's mean; the dotted line is the eye center (0). The horizontal panels (left) are shifted between conditions; the vertical panels (right) overlap.
+In the histograms below, black = centered, red = biased; the dotted line is the eye center (0). The horizontal panels (left) are shifted between conditions; the vertical panels (right) overlap.
 
 ![Eye-frame position histograms](figures/eyeframe_histograms.png)
 

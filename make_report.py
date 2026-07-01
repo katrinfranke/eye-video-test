@@ -29,9 +29,15 @@ log("compare_conditions done")
 daysum = res["daysum"]; perday = res["perday"]
 
 # 3b) example frames with ellipse + cross (2 centered + 2 biased sessions)
-ev.show_tracking_examples([centered[0], centered[3], biased[0], biased[3]], k=5)
+EX = [centered[0], centered[3], biased[0], biased[3]]
+ev.show_tracking_examples(EX, k=5)
 plt.savefig(f"{FIG}/tracking_examples.png", dpi=110, bbox_inches="tight"); plt.close("all")
 log("tracking_examples figure done")
+
+# 3c) eye-frame coordinate system on 4 example sessions
+ev.show_eyeframes(EX, n=N, cols=2)
+plt.savefig(f"{FIG}/eyeframe_coordinates.png", dpi=110, bbox_inches="tight"); plt.close("all")
+log("eyeframe_coordinates figure done")
 
 # 4) tracker discrepancy by condition + figure
 ev.compare_agreement(centered, biased, n=N, high=HIGH)

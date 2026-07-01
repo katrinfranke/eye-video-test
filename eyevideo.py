@@ -17,6 +17,11 @@ ANIMAL_DIR = "/mnt/at-storageB1_I/EyeVideo/AT-B1NO1"
 CHUNK_SECONDS = 5.0
 LANDMARK_FILE = "eye_landmarks.json"
 
+# consistent colors across all figures
+COND_PALETTE = ["black", "red", "tab:blue", "tab:purple", "tab:orange"]  # conditions (centered, biased, ...)
+C_ROBUST = "cyan"      # robust ellipse tracker
+C_ONLINE = "orange"    # online centroid tracker
+
 _SIZE_CACHE = {}
 _TRK = {}
 
@@ -326,6 +331,22 @@ def show_landmarks(date, n=120):
     ax.arrow(*F["c"], *(F["vd"]*F["hv"]), color="lime", width=2)
     ax.set_title(f"{date} eye frame (red=u, green=v)"); ax.set_xticks([]); ax.set_yticks([]); plt.show()
 
+def show_eyeframes(dates, n=200, cols=2):
+    """Grid of mean eye images with clicked landmarks + eye-frame axes (red=u, green=v)."""
+    if isinstance(dates, str): dates = [dates]
+    rows = int(np.ceil(len(dates) / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(cols*5, rows*3.8), squeeze=False)
+    for ax, d in zip(axes.ravel(), dates):
+        r = track_both(session_for_date(d), n); F = eye_frame(LANDMARKS[d])
+        ax.imshow(r["mean"], cmap="gray", vmin=0, vmax=255)
+        P = np.array(LANDMARKS[d]); ax.plot(np.append(P[:,0],P[0,0]), np.append(P[:,1],P[0,1]), "y-o", ms=3, lw=1)
+        ax.arrow(*F["c"], *(F["ud"]*F["hu"]), color="red", width=2, length_includes_head=True)
+        ax.arrow(*F["c"], *(F["vd"]*F["hv"]), color="lime", width=2, length_includes_head=True)
+        ax.set_title(d, fontsize=9); ax.set_xticks([]); ax.set_yticks([])
+    for ax in axes.ravel()[len(dates):]:
+        ax.axis("off")
+    plt.tight_layout(); plt.show()
+
 # ---------------------------------------------------------------- QC & analysis plots
 def plot_pupil_xy(date, n=1000, high=50.0):
     """Pupil x and y over the session for n equally-spaced frames, both trackers."""
@@ -357,12 +378,11 @@ def tracker_agreement(dates, n=120, high=50.0):
         vals = []
         for d, r in data:
             e = r["ell"][:, j]; o = r["onl"][:, j]
-            ax[j].scatter(e, o, s=10, alpha=0.5, label=d); vals += list(e) + list(o)
+            ax[j].scatter(e, o, s=8, alpha=0.3, color="tab:blue", edgecolors="none"); vals += list(e) + list(o)
         if vals:
             lo, hi = min(vals), max(vals); ax[j].plot([lo, hi], [lo, hi], "k--", lw=1)
         ax[j].set_xlabel(f"ellipse {lab} (px)"); ax[j].set_ylabel(f"online {lab} (px)")
         ax[j].set_title(f"pupil {lab}: robust vs online"); ax[j].set_aspect("equal", "box")
-        ax[j].legend(fontsize=7)
     plt.tight_layout(); plt.show()
     for d, r in data:
         rx = np.corrcoef(r["ell"][:, 0], r["onl"][:, 0])[0, 1]
@@ -389,10 +409,10 @@ def show_tracking_examples(dates, k=5, high=50.0, search=40):
             if c >= len(found): ax.axis("off"); continue
             t, g, e = found[c]; (cx, cy), (MA, ma), ang = e
             ax.imshow(g, cmap="gray", vmin=0, vmax=255)
-            ax.add_patch(Ellipse((cx, cy), MA, ma, angle=ang, fill=False, ec="cyan", lw=1.6))
-            ax.plot(cx, cy, "+", c="cyan", ms=9, mew=1.6)
+            ax.add_patch(Ellipse((cx, cy), MA, ma, angle=ang, fill=False, ec=C_ROBUST, lw=1.6))
+            ax.plot(cx, cy, "+", c=C_ROBUST, ms=9, mew=1.6)
             ox, oy = get_pupil_online(g, 0.0, high)
-            if ox is not None: ax.plot(ox, oy, "x", c="orange", ms=9, mew=1.8)
+            if ox is not None: ax.plot(ox, oy, "x", c=C_ONLINE, ms=9, mew=1.8)
             if c == 0: ax.set_ylabel(d, fontsize=9)
             ax.set_title(f"{t/60:.0f}m", fontsize=7)
     plt.tight_layout(); plt.show()
@@ -407,13 +427,13 @@ def pupil_cloud_eyeframe(date, n=120, high=50.0):
     fig, ax = plt.subplots(1, 2, figsize=(13, 5.2))
     ax[0].imshow(r["mean"], cmap="gray", vmin=0, vmax=255)
     P = np.array(LANDMARKS[date]); ax[0].plot(np.append(P[:,0],P[0,0]), np.append(P[:,1],P[0,1]), "y-", lw=1)
-    ax[0].scatter(r["ell"][:,0], r["ell"][:,1], s=8, c="cyan", alpha=0.5, label="robust")
-    ax[0].scatter(r["onl"][:,0], r["onl"][:,1], s=8, c="orange", alpha=0.5, label="online")
+    ax[0].scatter(r["ell"][:,0], r["ell"][:,1], s=8, c=C_ROBUST, alpha=0.5, label="robust")
+    ax[0].scatter(r["onl"][:,0], r["onl"][:,1], s=8, c=C_ONLINE, alpha=0.5, label="online")
     ax[0].arrow(*F["c"], *(F["ud"]*F["hu"]), color="red", width=2)
     ax[0].arrow(*F["c"], *(F["vd"]*F["hv"]), color="lime", width=2)
     ax[0].set_title(f"{date}  (image space)"); ax[0].set_xticks([]); ax[0].set_yticks([]); ax[0].legend(fontsize=8)
-    ax[1].scatter(ue[:,0], ue[:,1], s=12, c="cyan", alpha=0.6, label="robust")
-    ax[1].scatter(uo[:,0], uo[:,1], s=12, c="orange", alpha=0.6, label="online")
+    ax[1].scatter(ue[:,0], ue[:,1], s=12, c=C_ROBUST, alpha=0.6, label="robust")
+    ax[1].scatter(uo[:,0], uo[:,1], s=12, c=C_ONLINE, alpha=0.6, label="online")
     ax[1].plot(np.median(ue[:,0]), np.median(ue[:,1]), "*", c="blue", ms=16, mec="w")
     ax[1].axvline(0, color="k", ls=":"); ax[1].axhline(0, color="k", ls=":")
     ax[1].set_xlim(-1.2, 1.2); ax[1].set_ylim(1.2, -1.2); ax[1].set_aspect("equal")
@@ -529,8 +549,7 @@ def compare_agreement(centered=None, biased=None, conditions=None, n=120, high=5
     if conditions is None:
         conditions = {"centered": centered or [], "biased": biased or []}
     names = list(conditions)
-    palette = ["tab:green", "tab:red", "tab:blue", "tab:purple", "tab:orange"]
-    colors = {nm: palette[i % len(palette)] for i, nm in enumerate(names)}
+    colors = {nm: COND_PALETTE[i % len(COND_PALETTE)] for i, nm in enumerate(names)}
     pf = {nm: {"ex": [], "ox": [], "ey": [], "oy": []} for nm in names}   # per-frame
     dday = {nm: {"dx": [], "dy": []} for nm in names}                     # per-session median delta
     for nm in names:
@@ -559,7 +578,7 @@ def compare_agreement(centered=None, biased=None, conditions=None, n=120, high=5
         rng = (np.percentile(alld, 1), np.percentile(alld, 99)) if alld else (-1, 1)
         for nm in names:
             dd = np.array(pf[nm][key[0]]) - np.array(pf[nm][key[1]])
-            axis.hist(dd, bins=bins, range=rng, alpha=0.5, color=colors[nm], density=True, label=nm)
+            axis.hist(dd, bins=bins, range=rng, histtype="step", lw=1.6, color=colors[nm], density=True, label=nm)
         axis.axvline(0, color="k", ls=":"); axis.set_xlabel(f"delta {lab} = online - ellipse (px)")
         axis.set_ylabel("density"); axis.set_title(f"tracker discrepancy in {lab}"); axis.legend(fontsize=8)
     plt.tight_layout(); plt.show()
@@ -589,8 +608,7 @@ def compare_conditions(centered=None, biased=None, conditions=None,
     if conditions is None:
         conditions = {"centered": centered or [], "biased": biased or []}
     names = list(conditions)
-    palette = ["black", "red", "tab:blue", "tab:purple", "tab:orange"]
-    colors = {nm: palette[i % len(palette)] for i, nm in enumerate(names)}
+    colors = {nm: COND_PALETTE[i % len(COND_PALETTE)] for i, nm in enumerate(names)}
     trackers = [("ell", "robust ellipse"), ("onl", "online centroid")]
     AX = [("u", 0, "horizontal (eye-frame x)"), ("v", 1, "vertical (eye-frame y)")]
     # per-frame coords and per-session summaries, per condition/tracker/axis
@@ -617,8 +635,6 @@ def compare_conditions(centered=None, biased=None, conditions=None,
             for nm in names:
                 ax[i][j].hist(pooled[nm][tr][ax_key], bins=bins, range=(-1, 1), histtype="step",
                               lw=1.6, color=colors[nm], label=nm, density=True)
-                for sv in daysum[nm][tr][ax_key]:               # per-session mean
-                    ax[i][j].axvline(sv, color=colors[nm], lw=0.7, alpha=0.55)
             ax[i][j].set_title(f"{tlab}: {alab}"); ax[i][j].legend(fontsize=8)
             ax[i][j].set_xlabel("pupil position in eye frame (-1 .. +1, 0 = centered)")
             ax[i][j].set_ylabel("density")

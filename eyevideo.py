@@ -403,6 +403,57 @@ def _group_test(groups):
     s, p = stats.f_oneway(*groups)
     return "one-way ANOVA", float(s), float(p)
 
+def compare_agreement(centered=None, biased=None, conditions=None, n=120, high=50.0, bins=50):
+    """Per condition, compare the two trackers directly: ellipse-x vs online-x and
+    ellipse-y vs online-y scatter (dashed = identity), plus the discrepancy
+    delta = online - ellipse. If delta differs between conditions, a tracker artifact
+    (not real gaze) could explain a group difference. No landmarks needed."""
+    if conditions is None:
+        conditions = {"centered": centered or [], "biased": biased or []}
+    names = list(conditions)
+    palette = ["tab:green", "tab:red", "tab:blue", "tab:purple", "tab:orange"]
+    colors = {nm: palette[i % len(palette)] for i, nm in enumerate(names)}
+    pf = {nm: {"ex": [], "ox": [], "ey": [], "oy": []} for nm in names}   # per-frame
+    dday = {nm: {"dx": [], "dy": []} for nm in names}                     # per-session median delta
+    for nm in names:
+        for d in conditions[nm]:
+            r = track_both(session_for_date(d), n, high)
+            if r["n"] == 0:
+                continue
+            ex, ox = r["ell"][:, 0], r["onl"][:, 0]; ey, oy = r["ell"][:, 1], r["onl"][:, 1]
+            pf[nm]["ex"] += list(ex); pf[nm]["ox"] += list(ox)
+            pf[nm]["ey"] += list(ey); pf[nm]["oy"] += list(oy)
+            dday[nm]["dx"].append(float(np.median(ox - ex))); dday[nm]["dy"].append(float(np.median(oy - ey)))
+    fig, ax = plt.subplots(2, 2, figsize=(12, 10))
+    for axis, (a, b, lab) in zip([ax[0, 0], ax[0, 1]], [("ex", "ox", "x"), ("ey", "oy", "y")]):
+        vals = []
+        for nm in names:
+            axis.scatter(pf[nm][a], pf[nm][b], s=8, alpha=0.4, color=colors[nm], label=nm)
+            vals += pf[nm][a] + pf[nm][b]
+        if vals:
+            lo, hi = min(vals), max(vals); axis.plot([lo, hi], [lo, hi], "k--", lw=1)
+        axis.set_xlabel(f"ellipse {lab} (px)"); axis.set_ylabel(f"online {lab} (px)")
+        axis.set_title(f"pupil {lab}: robust vs online"); axis.set_aspect("equal", "box"); axis.legend(fontsize=8)
+    for axis, key, lab in [(ax[1, 0], ("ox", "ex"), "x"), (ax[1, 1], ("oy", "ey"), "y")]:
+        alld = []
+        for nm in names:
+            dd = np.array(pf[nm][key[0]]) - np.array(pf[nm][key[1]]); alld += list(dd)
+        rng = (np.percentile(alld, 1), np.percentile(alld, 99)) if alld else (-1, 1)
+        for nm in names:
+            dd = np.array(pf[nm][key[0]]) - np.array(pf[nm][key[1]])
+            axis.hist(dd, bins=bins, range=rng, alpha=0.5, color=colors[nm], density=True, label=nm)
+        axis.axvline(0, color="k", ls=":"); axis.set_xlabel(f"delta {lab} = online - ellipse (px)")
+        axis.set_ylabel("density"); axis.set_title(f"tracker discrepancy in {lab}"); axis.legend(fontsize=8)
+    plt.tight_layout(); plt.show()
+    for lab, keys in [("delta x", "dx"), ("delta y", "dy")]:
+        for nm in names:
+            arr = np.array(dday[nm][keys])
+            print(f"{lab} {nm:<9} per-session median: {np.round(arr,2).tolist()}  mean={np.mean(arr):+.2f}px" if len(arr) else f"{lab} {nm}: (none)")
+        ls, st, p = _group_test([dday[nm][keys] for nm in names])
+        print(f"[{lab}] session-level {ls} (n_days={[len(conditions[nm]) for nm in names]}): stat={st:.3f} p={p:.4g}"
+              + ("  <-- need >=2 days/condition" if p != p else ""))
+    return dict(perframe=pf, daymedian=dday)
+
 def compare_conditions(centered=None, biased=None, conditions=None,
                        n=120, high=50.0, bins=60, landmarks=None):
     """Compare pupil u (eye frame) between conditions, for both trackers.

@@ -488,56 +488,69 @@ def compare_agreement(centered=None, biased=None, conditions=None, n=120, high=5
     return dict(perframe=pf, daymedian=dday)
 
 def compare_conditions(centered=None, biased=None, conditions=None,
-                       n=120, high=50.0, bins=60, landmarks=None):
-    """Compare pupil u (eye frame) between conditions, for both trackers.
+                       n=120, high=50.0, bins=60, summary="mean", landmarks=None):
+    """Compare eye-frame pupil position between conditions, for both trackers and both axes
+    (u = horizontal / eye-frame x, v = vertical / eye-frame y).
 
     Provide either centered=[...], biased=[...] (two groups) or
     conditions={'name': [dates], ...} for two or more groups.
-    Stats: two groups -> Welch t-test; >2 -> one-way ANOVA. The valid test is run on
-    per-SESSION median u (n = #days); a frame-level test is also shown but is
-    pseudo-replicated (correlated frames) and only illustrative.
+    The test asks whether the MEAN eye-frame position differs across conditions, run on one
+    summary value per session (summary='mean' or 'median'; independent unit = the session,
+    n = #days): two groups -> Welch t-test, >2 -> one-way ANOVA. A frame-level test is also
+    printed but is pseudo-replicated (correlated frames) and only illustrative.
     """
     LM = landmarks if landmarks is not None else LANDMARKS
+    agg = np.mean if summary == "mean" else np.median
     if conditions is None:
         conditions = {"centered": centered or [], "biased": biased or []}
     names = list(conditions)
     palette = ["tab:green", "tab:red", "tab:blue", "tab:purple", "tab:orange"]
     colors = {nm: palette[i % len(palette)] for i, nm in enumerate(names)}
-    pooled = {nm: {"ell": [], "onl": []} for nm in names}       # per-frame u
-    daymed = {nm: {"ell": [], "onl": []} for nm in names}       # per-session median u
+    trackers = [("ell", "robust ellipse"), ("onl", "online centroid")]
+    AX = [("u", 0, "horizontal (eye-frame x)"), ("v", 1, "vertical (eye-frame y)")]
+    # per-frame coords and per-session summaries, per condition/tracker/axis
+    pooled = {nm: {tr: {"u": [], "v": []} for tr, _ in trackers} for nm in names}
+    daysum = {nm: {tr: {"u": [], "v": []} for tr, _ in trackers} for nm in names}
     perday = []
     for nm in names:
         for d in conditions[nm]:
             if d not in LM:
                 raise ValueError(f"no landmarks for {d} - clicker_if_missing('{d}') first")
             r = track_both(session_for_date(d), n, high); F = eye_frame(LM[d])
-            ue = [to_eye(p, F)[0] for p in r["ell"]]; uo = [to_eye(p, F)[0] for p in r["onl"]]
-            pooled[nm]["ell"] += ue; pooled[nm]["onl"] += uo
-            daymed[nm]["ell"].append(float(np.median(ue))); daymed[nm]["onl"].append(float(np.median(uo)))
-            perday.append((nm, d, float(np.median(ue)), float(np.median(uo)), r["n"]))
-    fig, ax = plt.subplots(1, 2, figsize=(13, 4.5))
-    for nm in names:
-        for j, key in enumerate(["ell", "onl"]):
-            ax[j].hist(pooled[nm][key], bins=bins, range=(-1, 1), alpha=0.5,
-                       color=colors[nm], label=nm, density=True)
-    for a, ttl in zip(ax, ["robust ellipse pupil", "online centroid"]):
-        a.axvline(0, color="k", ls=":"); a.set_title(ttl); a.legend(fontsize=8)
-        a.set_xlabel("pupil u in eye frame (-1 .. +1 corner, 0 = centered)"); a.set_ylabel("density")
+            row = [nm, d]
+            for tr, _ in trackers:
+                uv = np.array([to_eye(p, F) for p in r[tr]]).reshape(-1, 2)
+                pooled[nm][tr]["u"] += list(uv[:, 0]); pooled[nm][tr]["v"] += list(uv[:, 1])
+                su, sv = float(agg(uv[:, 0])), float(agg(uv[:, 1]))
+                daysum[nm][tr]["u"].append(su); daysum[nm][tr]["v"].append(sv)
+                row += [su, sv]
+            perday.append(tuple(row + [r["n"]]))
+    fig, ax = plt.subplots(2, 2, figsize=(13, 9))
+    for i, (tr, tlab) in enumerate(trackers):
+        for ax_key, j, alab in AX:
+            for nm in names:
+                ax[i][j].hist(pooled[nm][tr][ax_key], bins=bins, range=(-1, 1), alpha=0.5,
+                              color=colors[nm], label=nm, density=True)
+            ax[i][j].axvline(0, color="k", ls=":")
+            ax[i][j].set_title(f"{tlab}: {alab}"); ax[i][j].legend(fontsize=8)
+            ax[i][j].set_xlabel("pupil position in eye frame (-1 .. +1, 0 = centered)")
+            ax[i][j].set_ylabel("density")
     plt.tight_layout(); plt.show()
 
-    print(f"{'cond':<10}{'date':<12}{'u_robust':>9}{'u_online':>9}{'n':>6}")
-    for row in perday:
-        print(f"{row[0]:<10}{row[1]:<12}{row[2]:>9.3f}{row[3]:>9.3f}{row[4]:>6d}")
-    for nm in names:
-        e = np.array(pooled[nm]["ell"]); o = np.array(pooled[nm]["onl"])
-        nd = len(conditions[nm])
-        print(f"POOLED {nm:<9} robust u median={np.median(e):+.3f}  online u median={np.median(o):+.3f}"
-              f"  frames={len(e)}  days={nd}")
-    for key, lab in [("ell", "robust ellipse"), ("onl", "online centroid")]:
-        ls, lstat, lp = _group_test([daymed[nm][key] for nm in names])       # session-level (valid)
-        fs, fstat, fp = _group_test([pooled[nm][key] for nm in names])       # frame-level (illustrative)
-        print(f"[{lab}] session-level {ls} (n_days={[len(conditions[nm]) for nm in names]}): "
-              f"stat={lstat:.3f} p={lp:.4g}"
-              + ("  <-- need >=2 days/condition" if lp != lp else ""))
-        print(f"[{lab}] frame-level {fs} (pseudo-replicated, illustrative): stat={fstat:.3f} p={fp:.4g}")
-    return dict(pooled=pooled, daymed=daymed, perday=perday)
+    print(f"per-session {summary} of eye-frame position (u=horizontal, v=vertical):")
+    print(f"{'cond':<9}{'date':<12}{'u_rob':>7}{'v_rob':>7}{'u_onl':>7}{'v_onl':>7}{'n':>6}")
+    for r in perday:
+        print(f"{r[0]:<9}{r[1]:<12}{r[2]:>7.3f}{r[3]:>7.3f}{r[4]:>7.3f}{r[5]:>7.3f}{r[6]:>6d}")
+    for tr, tlab in trackers:
+        for ax_key, _, alab in AX:
+            for nm in names:
+                vals = daysum[nm][tr][ax_key]
+                m = np.mean(vals) if vals else float("nan")
+                print(f"  {tlab:<16} {alab:<24} {nm:<9} mean of session-{summary} = {m:+.3f}  days={len(vals)}")
+            ls, lstat, lp = _group_test([daysum[nm][tr][ax_key] for nm in names])   # session-level (valid)
+            fs, fstat, fp = _group_test([pooled[nm][tr][ax_key] for nm in names])   # frame-level (illustrative)
+            print(f"  -> [{tlab}/{alab}] session-level {ls} (n_days={[len(conditions[nm]) for nm in names]}): "
+                  f"stat={lstat:.3f} p={lp:.4g}" + ("  <-- need >=2 days/condition" if lp != lp else ""))
+            print(f"     [{tlab}/{alab}] frame-level {fs} (pseudo-replicated, illustrative): "
+                  f"stat={fstat:.3f} p={fp:.4g}\n")
+    return dict(pooled=pooled, daysum=daysum, perday=perday)

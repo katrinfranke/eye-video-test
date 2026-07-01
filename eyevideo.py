@@ -423,6 +423,91 @@ def pupil_cloud_eyeframe(date, n=120, high=50.0):
     print(f"{date}: median eye-frame u robust={np.median(ue[:,0]):+.3f} online={np.median(uo[:,0]):+.3f}  n={r['n']}")
     return dict(ue=ue, uo=uo)
 
+def _eyeframe_by_session(dates, axis="u", tracker="ell", n=200, high=50.0, landmarks=None):
+    """Per session: (summary-agnostic) 1-D array of eye-frame coord `axis` for `tracker`."""
+    LM = landmarks if landmarks is not None else LANDMARKS
+    j = 0 if axis == "u" else 1
+    out = []
+    for d in dates:
+        if d not in LM:
+            raise ValueError(f"no landmarks for {d} - clicker_if_missing('{d}') first")
+        r = track_both(session_for_date(d), n, high); F = eye_frame(LM[d])
+        uv = np.array([to_eye(p, F) for p in r[tracker]]).reshape(-1, 2)
+        out.append(uv[:, j])
+    return out   # list of arrays, one per session
+
+def _perm_statistic(A_sessions, B_sessions, stat, summary):
+    """Statistic between two groups of per-session arrays."""
+    agg = np.mean if summary == "mean" else np.median
+    if stat in ("mean_diff", "median_diff", "var_diff"):
+        a = np.array([agg(s) for s in A_sessions]); b = np.array([agg(s) for s in B_sessions])
+        if stat == "var_diff":
+            return abs(np.var(a, ddof=1) - np.var(b, ddof=1))
+        return abs(np.mean(a) - np.mean(b)) if stat == "mean_diff" else abs(np.median(a) - np.median(b))
+    # distribution-distance stats on pooled frames (session-level shuffle preserved by caller)
+    A = np.concatenate(A_sessions); B = np.concatenate(B_sessions)
+    from scipy import stats as ss
+    if stat == "ks":
+        return ss.ks_2samp(A, B).statistic
+    if stat == "wasserstein":
+        return ss.wasserstein_distance(A, B)
+    raise ValueError("unknown stat " + stat)
+
+def permutation_test(centered=None, biased=None, n=200, high=50.0, summary="mean",
+                     stat="mean_diff", n_perm=20000, landmarks=None, plot=True):
+    """Two-condition label-shuffle test, for both trackers and both axes.
+
+    The exchangeable unit is the SESSION: we permute which sessions are 'centered' vs 'biased'
+    (exact enumeration of all C(N, n_centered) splits when feasible, else `n_perm` random draws),
+    recompute `stat`, and compare the observed value to that null.
+
+    stat: 'mean_diff' | 'median_diff' | 'var_diff' (on per-session summaries) or
+          'ks' | 'wasserstein' (distribution distance on pooled frames). Two-sided by
+          construction (all these statistics are non-negative distances).
+    """
+    from itertools import combinations
+    trackers = [("ell", "robust ellipse"), ("onl", "online centroid")]
+    axes = [("u", "horizontal (x)"), ("v", "vertical (y)")]
+    N = len(centered) + len(biased); nc = len(centered); dates = list(centered) + list(biased)
+    idx = np.arange(N)
+    combos = list(combinations(range(N), nc))
+    exact = len(combos) <= n_perm
+    if not exact:
+        combos = None
+    fig = None
+    if plot:
+        fig, axfig = plt.subplots(2, 2, figsize=(13, 9))
+    results = {}
+    for i, (tr, tlab) in enumerate(trackers):
+        for k, (ax, alab) in enumerate(axes):
+            sess = _eyeframe_by_session(dates, ax, tr, n, high, landmarks)
+            obs = _perm_statistic(sess[:nc], sess[nc:], stat, summary)
+            null = []
+            if exact:
+                for comb in combos:
+                    m = np.zeros(N, bool); m[list(comb)] = True
+                    null.append(_perm_statistic([sess[a] for a in idx[m]], [sess[a] for a in idx[~m]], stat, summary))
+            else:
+                for _ in range(n_perm):
+                    m = np.zeros(N, bool); m[np.random.choice(N, nc, replace=False)] = True
+                    null.append(_perm_statistic([sess[a] for a in idx[m]], [sess[a] for a in idx[~m]], stat, summary))
+            null = np.array(null)
+            p = (np.sum(null >= obs - 1e-12) + (0 if exact else 1)) / (len(null) + (0 if exact else 1))
+            results[(tr, ax)] = dict(observed=float(obs), p=float(p), n_perm=len(null), exact=exact)
+            if plot:
+                a = axfig[i][k]
+                a.hist(null, bins=40, color="0.7"); a.axvline(obs, color="red", lw=2)
+                a.set_title(f"{tlab} / {alab}\n{stat}: obs={obs:.3f}, p={p:.3f}"
+                            f" ({'exact '+str(len(null)) if exact else str(len(null))+' rand'})")
+                a.set_xlabel(f"{stat} under shuffled labels"); a.set_ylabel("count")
+    if plot:
+        plt.tight_layout(); plt.show()
+    print(f"permutation test  stat={stat}  summary={summary}  "
+          f"({'exact' if exact else 'random'} null, centered n={nc}, biased n={N-nc})")
+    for (tr, ax), v in results.items():
+        print(f"  {tr}/{ax}: observed={v['observed']:.4f}  p={v['p']:.4f}  (n_perm={v['n_perm']})")
+    return results
+
 def _group_test(groups):
     """groups: list of 1-D arrays. Two -> Welch t-test; >2 -> one-way ANOVA.
     Returns (label, stat, p) or (label, nan, nan) if any group has <2 points."""

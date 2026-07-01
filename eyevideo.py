@@ -390,31 +390,70 @@ def pupil_cloud_eyeframe(date, n=120, high=50.0):
     print(f"{date}: median eye-frame u robust={np.median(ue[:,0]):+.3f} online={np.median(uo[:,0]):+.3f}  n={r['n']}")
     return dict(ue=ue, uo=uo)
 
-def compare_conditions(centered, biased, n=120, high=50.0, landmarks=None):
-    """Compare pupil u (eye frame) between two groups of dates, for both trackers."""
+def _group_test(groups):
+    """groups: list of 1-D arrays. Two -> Welch t-test; >2 -> one-way ANOVA.
+    Returns (label, stat, p) or (label, nan, nan) if any group has <2 points."""
+    from scipy import stats
+    groups = [np.asarray(g, float) for g in groups]
+    if any(len(g) < 2 for g in groups):
+        return ("t-test" if len(groups) == 2 else "ANOVA"), float("nan"), float("nan")
+    if len(groups) == 2:
+        s, p = stats.ttest_ind(groups[0], groups[1], equal_var=False)
+        return "Welch t-test", float(s), float(p)
+    s, p = stats.f_oneway(*groups)
+    return "one-way ANOVA", float(s), float(p)
+
+def compare_conditions(centered=None, biased=None, conditions=None,
+                       n=120, high=50.0, bins=60, landmarks=None):
+    """Compare pupil u (eye frame) between conditions, for both trackers.
+
+    Provide either centered=[...], biased=[...] (two groups) or
+    conditions={'name': [dates], ...} for two or more groups.
+    Stats: two groups -> Welch t-test; >2 -> one-way ANOVA. The valid test is run on
+    per-SESSION median u (n = #days); a frame-level test is also shown but is
+    pseudo-replicated (correlated frames) and only illustrative.
+    """
     LM = landmarks if landmarks is not None else LANDMARKS
-    conds = [("centered", centered, "tab:green"), ("biased", biased, "tab:red")]
-    pooled = {c[0]: {"ell": [], "onl": []} for c in conds}; perday = []
-    for name, dates, _ in conds:
-        for d in dates:
+    if conditions is None:
+        conditions = {"centered": centered or [], "biased": biased or []}
+    names = list(conditions)
+    palette = ["tab:green", "tab:red", "tab:blue", "tab:purple", "tab:orange"]
+    colors = {nm: palette[i % len(palette)] for i, nm in enumerate(names)}
+    pooled = {nm: {"ell": [], "onl": []} for nm in names}       # per-frame u
+    daymed = {nm: {"ell": [], "onl": []} for nm in names}       # per-session median u
+    perday = []
+    for nm in names:
+        for d in conditions[nm]:
             if d not in LM:
-                raise ValueError(f"no landmarks for {d} - click_landmarks('{d}') first")
+                raise ValueError(f"no landmarks for {d} - clicker_if_missing('{d}') first")
             r = track_both(session_for_date(d), n, high); F = eye_frame(LM[d])
             ue = [to_eye(p, F)[0] for p in r["ell"]]; uo = [to_eye(p, F)[0] for p in r["onl"]]
-            pooled[name]["ell"] += ue; pooled[name]["onl"] += uo
-            perday.append((name, d, float(np.median(ue)), float(np.median(uo)), r["n"]))
+            pooled[nm]["ell"] += ue; pooled[nm]["onl"] += uo
+            daymed[nm]["ell"].append(float(np.median(ue))); daymed[nm]["onl"].append(float(np.median(uo)))
+            perday.append((nm, d, float(np.median(ue)), float(np.median(uo)), r["n"]))
     fig, ax = plt.subplots(1, 2, figsize=(13, 4.5))
-    for name, _, col in conds:
-        ax[0].hist(pooled[name]["ell"], bins=25, range=(-1, 1), alpha=0.5, color=col, label=name)
-        ax[1].hist(pooled[name]["onl"], bins=25, range=(-1, 1), alpha=0.5, color=col, label=name)
+    for nm in names:
+        for j, key in enumerate(["ell", "onl"]):
+            ax[j].hist(pooled[nm][key], bins=bins, range=(-1, 1), alpha=0.5,
+                       color=colors[nm], label=nm, density=True)
     for a, ttl in zip(ax, ["robust ellipse pupil", "online centroid"]):
         a.axvline(0, color="k", ls=":"); a.set_title(ttl); a.legend(fontsize=8)
-        a.set_xlabel("pupil u in eye frame (-1 .. +1 corner, 0 = centered)")
+        a.set_xlabel("pupil u in eye frame (-1 .. +1 corner, 0 = centered)"); a.set_ylabel("density")
     plt.tight_layout(); plt.show()
+
     print(f"{'cond':<10}{'date':<12}{'u_robust':>9}{'u_online':>9}{'n':>6}")
     for row in perday:
         print(f"{row[0]:<10}{row[1]:<12}{row[2]:>9.3f}{row[3]:>9.3f}{row[4]:>6d}")
-    for name, _, _ in conds:
-        e = np.array(pooled[name]["ell"]); o = np.array(pooled[name]["onl"])
-        print(f"POOLED {name:<9} robust u median={np.median(e):+.3f}  online u median={np.median(o):+.3f}  N={len(e)}")
-    return pooled, perday
+    for nm in names:
+        e = np.array(pooled[nm]["ell"]); o = np.array(pooled[nm]["onl"])
+        nd = len(conditions[nm])
+        print(f"POOLED {nm:<9} robust u median={np.median(e):+.3f}  online u median={np.median(o):+.3f}"
+              f"  frames={len(e)}  days={nd}")
+    for key, lab in [("ell", "robust ellipse"), ("onl", "online centroid")]:
+        ls, lstat, lp = _group_test([daymed[nm][key] for nm in names])       # session-level (valid)
+        fs, fstat, fp = _group_test([pooled[nm][key] for nm in names])       # frame-level (illustrative)
+        print(f"[{lab}] session-level {ls} (n_days={[len(conditions[nm]) for nm in names]}): "
+              f"stat={lstat:.3f} p={lp:.4g}"
+              + ("  <-- need >=2 days/condition" if lp != lp else ""))
+        print(f"[{lab}] frame-level {fs} (pseudo-replicated, illustrative): stat={fstat:.3f} p={fp:.4g}")
+    return dict(pooled=pooled, daymed=daymed, perday=perday)

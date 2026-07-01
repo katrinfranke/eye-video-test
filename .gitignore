@@ -1,0 +1,10 @@
+# extracted video clips and any stray media
+clips/
+*.mp4
+
+# python
+__pycache__/
+*.pyc
+
+# jupyter
+.ipynb_checkpoints/

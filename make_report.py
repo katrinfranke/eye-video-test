@@ -48,6 +48,11 @@ log("compare_agreement done")
 ev.tracker_agreement(centered + biased, n=N, high=HIGH)
 plt.savefig(f"{FIG}/tracker_agreement.png", dpi=110, bbox_inches="tight"); plt.close("all")
 
+# 5b) highest-discrepancy frames with contributing pixels highlighted
+ev.show_discrepancy_examples(centered + biased, k=8, n=N, high=HIGH, by="both")
+plt.savefig(f"{FIG}/discrepancy_examples.png", dpi=110, bbox_inches="tight"); plt.close("all")
+log("discrepancy_examples figure done")
+
 allx_e, allx_o, ally_e, ally_o, dxs, dys = [], [], [], [], [], []
 for d in centered + biased:
     r = ev.track_both(ev.session_for_date(d), N, HIGH)

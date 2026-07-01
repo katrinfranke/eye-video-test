@@ -165,15 +165,26 @@ def detect_pupil_ellipse(g, min_circ=0.45):
         return None
     return cv2.fitEllipse(best)
 
-def get_pupil_online(image, low_threshold=0.0, high_threshold=50.0):
-    """Online tracker: centroid of all dark pixels in (low, high], after a 3x3 erode."""
+def online_mask(image, low_threshold=0.0, high_threshold=50.0):
+    """Binary mask of the pixels that contribute to the online centroid:
+    intensity in (low, high] after a 3x3 erosion."""
     low = cv2.threshold(image, low_threshold, 255, cv2.THRESH_BINARY)[1]
     high = cv2.threshold(image, high_threshold, 255, cv2.THRESH_BINARY_INV)[1]
-    m = cv2.erode(cv2.bitwise_and(low, high), np.ones((3, 3), np.uint8), 1)
-    mo = cv2.moments(m)
+    return cv2.erode(cv2.bitwise_and(low, high), np.ones((3, 3), np.uint8), 1)
+
+def get_pupil_online(image, low_threshold=0.0, high_threshold=50.0):
+    """Online tracker: centroid of all dark pixels in (low, high], after a 3x3 erode."""
+    mo = cv2.moments(online_mask(image, low_threshold, high_threshold))
     if mo["m00"] == 0:
         return None, None
     return mo["m10"]/mo["m00"], mo["m01"]/mo["m00"]
+
+def _mask_overlay_rgba(mask, color=(1.0, 0.0, 0.0), alpha=0.75):
+    """RGBA image that paints mask>0 pixels in `color` at `alpha`, transparent elsewhere."""
+    rgba = np.zeros((*mask.shape, 4), float)
+    sel = mask > 0
+    rgba[sel, 0], rgba[sel, 1], rgba[sel, 2], rgba[sel, 3] = (*color, alpha)
+    return rgba
 
 CACHE_DIR = ".track_cache"
 
@@ -401,8 +412,9 @@ def tracker_agreement(dates, n=120, high=50.0):
         mdy = np.median(np.abs(r["ell"][:, 1] - r["onl"][:, 1]))
         print(f"{d}: corr x={rx:.3f} y={ry:.3f}  median|Δx|={mdx:.1f}px |Δy|={mdy:.1f}px  n={r['n']}")
 
-def show_tracking_examples(dates, k=5, high=50.0, search=40):
-    """Rows = dates, cols = k example open-eye frames with both trackers overlaid."""
+def show_tracking_examples(dates, k=5, high=50.0, search=40, show_mask=True):
+    """Rows = dates, cols = k example open-eye frames. Overlays the online centroid-contributing
+    pixels (red, `show_mask`), the robust ellipse (cyan outline + center), and the online centroid (orange x)."""
     if isinstance(dates, str): dates = [dates]
     fig, axes = plt.subplots(len(dates), k, figsize=(k*2.8, len(dates)*2.4), squeeze=False)
     for r, d in enumerate(dates):
@@ -419,12 +431,50 @@ def show_tracking_examples(dates, k=5, high=50.0, search=40):
             if c >= len(found): ax.axis("off"); continue
             t, g, e = found[c]; (cx, cy), (MA, ma), ang = e
             ax.imshow(g, cmap="gray", vmin=0, vmax=255)
+            if show_mask: ax.imshow(_mask_overlay_rgba(online_mask(g, 0.0, high)))
             ax.add_patch(Ellipse((cx, cy), MA, ma, angle=ang, fill=False, ec=C_ROBUST, lw=1.6))
             ax.plot(cx, cy, "+", c=C_ROBUST, ms=9, mew=1.6)
             ox, oy = get_pupil_online(g, 0.0, high)
             if ox is not None: ax.plot(ox, oy, "x", c=C_ONLINE, ms=9, mew=1.8)
             if c == 0: ax.set_ylabel(d, fontsize=9)
             ax.set_title(f"{t/60:.0f}m", fontsize=7)
+    plt.tight_layout(); plt.show()
+
+def show_discrepancy_examples(dates, k=8, n=1000, high=50.0, by="both", cols=4):
+    """Frames with the largest ellipse-vs-online discrepancy, with the online centroid-contributing
+    pixels (red) highlighted plus the ellipse (cyan) and online centroid (orange x). `by`='x'|'y'|'both'
+    selects/ranks the discrepancy axis. Uses cached tracks (same n) to locate the frames."""
+    if isinstance(dates, str): dates = [dates]
+    rec = []   # (sdir, t, dx, dy)
+    for d in dates:
+        sdir = session_for_date(d); r = track_both(sdir, n, high)
+        if r["n"] == 0: continue
+        dx = r["onl"][:, 0] - r["ell"][:, 0]; dy = r["onl"][:, 1] - r["ell"][:, 1]
+        for i in range(r["n"]):
+            rec.append((sdir, float(r["t"][i]), float(dx[i]), float(dy[i])))
+    if by == "both":
+        kx = k // 2
+        picks = ([("x", z) for z in sorted(rec, key=lambda z: -abs(z[2]))[:kx]] +
+                 [("y", z) for z in sorted(rec, key=lambda z: -abs(z[3]))[:k - kx]])
+    else:
+        j = 2 if by == "x" else 3
+        picks = [(by, z) for z in sorted(rec, key=lambda z: -abs(z[j]))[:k]]
+    rows = int(np.ceil(len(picks) / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(cols*3.0, rows*2.7), squeeze=False)
+    for ax, (axis, (sdir, t, dx, dy)) in zip(axes.ravel(), picks):
+        g = grab_frame(sdir, t); ax.set_xticks([]); ax.set_yticks([])
+        ax.imshow(g, cmap="gray", vmin=0, vmax=255)
+        ax.imshow(_mask_overlay_rgba(online_mask(g, 0.0, high)))
+        e = detect_pupil_ellipse(g)
+        if e is not None:
+            (cx, cy), (MA, ma), ang = e
+            ax.add_patch(Ellipse((cx, cy), MA, ma, angle=ang, fill=False, ec=C_ROBUST, lw=1.4))
+            ax.plot(cx, cy, "+", c=C_ROBUST, ms=8, mew=1.4)
+        ox, oy = get_pupil_online(g, 0.0, high)
+        if ox is not None: ax.plot(ox, oy, "x", c=C_ONLINE, ms=8, mew=1.6)
+        ax.set_title(f"{os.path.basename(sdir)[:10]}  |{axis}|:  dx={dx:+.0f} dy={dy:+.0f}px", fontsize=7)
+    for ax in axes.ravel()[len(picks):]:
+        ax.axis("off")
     plt.tight_layout(); plt.show()
 
 def pupil_cloud_eyeframe(date, n=120, high=50.0):

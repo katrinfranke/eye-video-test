@@ -23,11 +23,11 @@ Four example sessions (two centered, two biased): mean eye image, clicked landma
 
 ## Detection quality
 
-Example frames from four sessions (two centered, two biased): robust ellipse (cyan outline + center `+`) and online centroid (orange `×`).
+Example frames from four sessions (two centered, two biased): red = pixels that pass the online threshold and contribute to the centroid; robust ellipse (cyan outline + center `+`); online centroid (orange `×`). On open-eye frames the contributing pixels are the pupil, and the two estimates coincide.
 
 ![Example frames with pupil ellipse and centroids](figures/tracking_examples.png)
 
-## Result 1 — the two trackers agree (detection is faithful)
+## Result 1 — offline (robust) vs online tracker: correlation and discrepancies
 
 Pooled over all 14 sessions (per-frame, both trackers on identical frames):
 
@@ -35,9 +35,13 @@ Pooled over all 14 sessions (per-frame, both trackers on identical frames):
 - median |online − robust|: `x` = 0.88 px, `y` = 0.67 px
 - per-session correlations 0.98–1.00; largest per-session median |Δx| = 3.9 px.
 
-The online centroid tracks the same point as the shape-based ellipse.
+The two estimates are highly correlated, with a per-frame discrepancy that is usually sub-pixel to a few pixels but occasionally large.
 
 ![Robust vs online agreement](figures/tracker_agreement.png)
+
+The frames with the largest discrepancy are shown below (top row: largest |Δx|; bottom row: largest |Δy|). Red = the pixels that pass the online threshold and contribute to the centroid; cyan = robust ellipse + center; orange × = online centroid. These are near-closed-eye frames: the robust ellipse mis-locks onto a small dark region (often up near the brow/lash shadow), while the online centroid is computed from the few dark pixels remaining near the eye. Large discrepancies are concentrated on these low-visibility frames rather than on open-eye frames.
+
+![Highest-discrepancy frames with contributing pixels](figures/discrepancy_examples.png)
 
 ## Result 2 — horizontal eye-frame position differs between conditions; vertical does not
 
@@ -56,14 +60,14 @@ In the histograms below, black = centered, red = biased; the dotted line is the 
 
 ![Eye-frame position histograms](figures/eyeframe_histograms.png)
 
-## Result 3 — the tracker discrepancy does not differ between conditions
+## Result 3 — tracker discrepancy by condition
 
-Per-session median (online − robust), compared between conditions (`compare_agreement`):
+Per-session median (online − robust), by condition (`compare_agreement`):
 
-- Δx: centered mean −0.71 px, biased −1.39 px, Welch p = 0.360
-- Δy: centered mean −0.25 px, biased −0.35 px, Welch p = 0.406
+- Δx: centered mean −0.71 px, biased −1.39 px (Welch p = 0.360)
+- Δy: centered mean −0.25 px, biased −0.35 px (Welch p = 0.406)
 
-The online-vs-robust discrepancy is at most a few pixels and is statistically indistinguishable between conditions, so it cannot account for the horizontal difference in Result 2.
+The discrepancy is a few pixels in both conditions and does not track the ~0.04 eye-frame (`u` ≈ tens of px) difference seen in Result 2.
 
 ![Tracker discrepancy by condition](figures/tracker_discrepancy.png)
 
@@ -101,7 +105,7 @@ The between-condition difference appears in the pupil position referenced to the
 
 ## Conclusion
 
-Horizontal pupil position in eye-based coordinates is shifted on biased days relative to centered days (robust t = 3.01, p = 0.012; online t = 2.92, p = 0.014); vertical position is unchanged. The online and offline trackers give the same result (per-frame r = 0.99; the online−offline discrepancy does not differ between conditions, p = 0.36). The day-to-day difference is therefore a **real shift in horizontal pupil position within the eye, not an artifact of the online tracker**. Provided the gaze calibration is accurate, the estimated monitor gaze coordinates are correct.
+Horizontal pupil position in eye-based coordinates is shifted on biased days relative to centered days (robust t = 3.01, p = 0.012; online t = 2.92, p = 0.014); vertical position is unchanged. The shift is present in **both** the offline (robust ellipse) and online (threshold-centroid) estimates, which are highly correlated (per-frame r = 0.99); the two estimates diverge mainly on near-closed-eye frames (Result 1), not on the open-eye frames that dominate each session's mean. The day-to-day difference therefore reflects a **real shift in horizontal pupil position within the eye**, seen regardless of which tracker is used, rather than something specific to the online pupil-detection step. Provided the gaze calibration is accurate, the estimated monitor gaze coordinates reflect this real shift.
 
 ## Limitations
 

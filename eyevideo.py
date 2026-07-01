@@ -170,11 +170,29 @@ def get_pupil_online(image, low_threshold=0.0, high_threshold=50.0):
         return None, None
     return mo["m10"]/mo["m00"], mo["m01"]/mo["m00"]
 
-def track_both(session_dir, n=120, high=50.0):
-    """Robust ellipse pupil AND online centroid on the same n frames (cached)."""
+CACHE_DIR = ".track_cache"
+
+def _cache_path(session_dir, n, high):
+    import hashlib
+    h = hashlib.md5(session_dir.encode()).hexdigest()[:8]
+    return os.path.join(CACHE_DIR, f"{os.path.basename(session_dir)}_{h}_n{n}_h{int(high)}.npz")
+
+def track_both(session_dir, n=120, high=50.0, use_cache=True):
+    """Robust ellipse pupil AND online centroid on the same n frames.
+
+    Tracked once per (session, n, high) and stored: in memory and on disk (.track_cache),
+    so it survives kernel restarts and is reused by every plot/analysis. Pass use_cache=False
+    to force a recompute (e.g. after changing the detector)."""
     key = (session_dir, n, high)
-    if key in _TRK:
+    if use_cache and key in _TRK:
         return _TRK[key]
+    cp = _cache_path(session_dir, n, high)
+    if use_cache and os.path.exists(cp):
+        z = np.load(cp)
+        r = dict(ell=z["ell"], onl=z["onl"], t=z["t"], n=int(z["n"]), W=int(z["W"]), H=int(z["H"]),
+                 mean=(z["mean"] if z["mean"].size else None))
+        _TRK[key] = r
+        return r
     total, _ = session_duration(session_dir); acc = None; PE = []; PO = []; T = []
     for t in np.linspace(0, total, n, endpoint=False):
         g = grab_frame(session_dir, t)
@@ -187,10 +205,25 @@ def track_both(session_dir, n=120, high=50.0):
         if g.shape != acc.shape: continue
         acc += g; PE.append((d["cx"], d["cy"])); PO.append((ox, oy)); T.append(t)
     W, H = frame_size(session_dir)
-    r = dict(ell=np.array(PE), onl=np.array(PO), t=np.array(T), n=len(PE), W=W, H=H,
-             mean=(acc/len(PE)).astype(np.uint8) if PE else None)
+    mean = (acc/len(PE)).astype(np.uint8) if PE else None
+    r = dict(ell=np.array(PE, float).reshape(-1, 2), onl=np.array(PO, float).reshape(-1, 2),
+             t=np.array(T, float), n=len(PE), W=W, H=H, mean=mean)
+    if use_cache:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        np.savez_compressed(cp, ell=r["ell"], onl=r["onl"], t=r["t"], n=r["n"], W=r["W"], H=r["H"],
+                            mean=(mean if mean is not None else np.array([], np.uint8)))
     _TRK[key] = r
     return r
+
+def track_dates(dates, n=200, high=50.0):
+    """Precompute & cache tracking for a list of dates once; returns {date: result}.
+    Call this at the top of the notebook so every later plot reuses the stored values."""
+    out = {}
+    for d in dates:
+        r = track_both(session_for_date(d), n, high)
+        out[d] = r
+        print(f"{d}: {r['n']}/{n} frames with pupil")
+    return out
 
 # ---------------------------------------------------------------- eye-anchored frame
 def eye_frame(pts):

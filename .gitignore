@@ -8,3 +8,6 @@ __pycache__/
 
 # jupyter
 .ipynb_checkpoints/
+
+# cached pupil tracking (regenerated on demand)
+.track_cache/

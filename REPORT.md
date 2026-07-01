@@ -17,7 +17,7 @@ Days labeled "biased" (from the online gaze estimate) show gaze offset to one si
 
 ## Eye-based coordinate frame
 
-Four example sessions (two centered, two biased): mean eye image, clicked landmarks (yellow), and the eye-frame axes — `u` horizontal (red), `v` vertical (green).
+Four example sessions (two centered, two biased): mean eye image, clicked landmarks (yellow), and the eye-frame axes drawn from the origin (white dot, `u=0`/`v=0`, the midpoint of the landmark extent) — `u` horizontal (red) and `v` vertical (green) each reaching `+1` at the arrow tip.
 
 ![Eye-frame coordinate system on four sessions](figures/eyeframe_coordinates.png)
 

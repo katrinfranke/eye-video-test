@@ -246,6 +246,18 @@ def to_eye(P, F):
     d = np.array(P, float) - F["c"]
     return ((d @ F["ud"]) - F["u0"])/F["hu"], ((d @ F["vd"]) - F["v0"])/F["hv"]
 
+def frame_origin(F):
+    """Image coords of the eye-frame origin (u=0, v=0) = midpoint of the landmark extent.
+    (Not the landmark centroid F['c'], which is offset by u0/v0.)"""
+    return F["c"] + F["u0"]*F["ud"] + F["v0"]*F["vd"]
+
+def _draw_axes(ax, F):
+    """Draw the eye-frame axes from the origin: red = +u to +1, green = +v to +1, dot = origin."""
+    o = frame_origin(F)
+    ax.arrow(*o, *(F["ud"]*F["hu"]), color="red", width=2, length_includes_head=True)
+    ax.arrow(*o, *(F["vd"]*F["hv"]), color="lime", width=2, length_includes_head=True)
+    ax.plot(*o, "o", color="white", mec="k", ms=5)
+
 # ---------------------------------------------------------------- landmarks
 def load_landmarks():
     if os.path.exists(LANDMARK_FILE):
@@ -327,8 +339,7 @@ def show_landmarks(date, n=120):
     r = track_both(session_for_date(date), n); F = eye_frame(LANDMARKS[date])
     fig, ax = plt.subplots(figsize=(8, 6)); ax.imshow(r["mean"], cmap="gray", vmin=0, vmax=255)
     P = np.array(LANDMARKS[date]); ax.plot(np.append(P[:,0],P[0,0]), np.append(P[:,1],P[0,1]), "y-o", ms=4)
-    ax.arrow(*F["c"], *(F["ud"]*F["hu"]), color="red", width=2)
-    ax.arrow(*F["c"], *(F["vd"]*F["hv"]), color="lime", width=2)
+    _draw_axes(ax, F)
     ax.set_title(f"{date} eye frame (red=u, green=v)"); ax.set_xticks([]); ax.set_yticks([]); plt.show()
 
 def show_eyeframes(dates, n=200, cols=2):
@@ -340,8 +351,7 @@ def show_eyeframes(dates, n=200, cols=2):
         r = track_both(session_for_date(d), n); F = eye_frame(LANDMARKS[d])
         ax.imshow(r["mean"], cmap="gray", vmin=0, vmax=255)
         P = np.array(LANDMARKS[d]); ax.plot(np.append(P[:,0],P[0,0]), np.append(P[:,1],P[0,1]), "y-o", ms=3, lw=1)
-        ax.arrow(*F["c"], *(F["ud"]*F["hu"]), color="red", width=2, length_includes_head=True)
-        ax.arrow(*F["c"], *(F["vd"]*F["hv"]), color="lime", width=2, length_includes_head=True)
+        _draw_axes(ax, F)
         ax.set_title(d, fontsize=9); ax.set_xticks([]); ax.set_yticks([])
     for ax in axes.ravel()[len(dates):]:
         ax.axis("off")
@@ -429,8 +439,7 @@ def pupil_cloud_eyeframe(date, n=120, high=50.0):
     P = np.array(LANDMARKS[date]); ax[0].plot(np.append(P[:,0],P[0,0]), np.append(P[:,1],P[0,1]), "y-", lw=1)
     ax[0].scatter(r["ell"][:,0], r["ell"][:,1], s=8, c=C_ROBUST, alpha=0.5, label="robust")
     ax[0].scatter(r["onl"][:,0], r["onl"][:,1], s=8, c=C_ONLINE, alpha=0.5, label="online")
-    ax[0].arrow(*F["c"], *(F["ud"]*F["hu"]), color="red", width=2)
-    ax[0].arrow(*F["c"], *(F["vd"]*F["hv"]), color="lime", width=2)
+    _draw_axes(ax[0], F)
     ax[0].set_title(f"{date}  (image space)"); ax[0].set_xticks([]); ax[0].set_yticks([]); ax[0].legend(fontsize=8)
     ax[1].scatter(ue[:,0], ue[:,1], s=12, c=C_ROBUST, alpha=0.6, label="robust")
     ax[1].scatter(uo[:,0], uo[:,1], s=12, c=C_ONLINE, alpha=0.6, label="online")

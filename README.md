@@ -44,10 +44,10 @@ high=40–50 but ~15 px (≈3.9°) at high=60. Use the booth-appropriate value.
   `results_accuracy.json`, `figures_acc/`.
   - Headline: at the correct per-booth threshold the online centroid matches the offline pupil to
     **< 1 px (≈ 0.15°) median, correlation ≈ 1.0** on both booths.
-- **[REPORT.md](REPORT.md)** (Report 2) — booth-1 gaze-bias investigation. Is the day-to-day
+- **[REPORT_gaze_bias.md](REPORT_gaze_bias.md)** (Report 2) — booth-1 gaze-bias investigation. Is the day-to-day
   "centered vs biased" difference (from the enigma daily viewer) real gaze or an online-tracker
   artifact? Full **eye-anchored-frame** analysis: pupil position (horizontal/vertical) per condition,
-  in both trackers. Built by `make_report.py` → `results.json`, `figures/`. Needs clicked landmarks
+  in both trackers. Built by `make_report.py` → `results.json`, `figures_gaze_bias/`. Needs clicked landmarks
   (`eye_landmarks.json`).
   - Headline: the horizontal within-eye shift is real (present in both trackers, p ≈ 0.011), not a
     detection artifact.

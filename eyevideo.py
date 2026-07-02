@@ -589,10 +589,11 @@ def tracker_agreement(dates, n=120, high=50.0, open_only=True, min_dark=OPEN_MIN
         mdx = np.median(np.abs(ell[:, 0] - onl[:, 0])); mdy = np.median(np.abs(ell[:, 1] - onl[:, 1]))
         print(f"{d}: corr x={rx:.3f} y={ry:.3f}  median|Δx|={mdx:.1f}px |Δy|={mdy:.1f}px  n={len(ell)}")
 
-def show_below_diagonal_examples(dates, k=6, n=1000, high=50.0, pct=(85, 97), cols=3, crop=80):
-    """Zoomed example open frames where the online centroid sits below the diagonal (online <
-    ellipse in both x and y) by a MODERATE amount (|discrepancy| in the `pct` percentile band,
-    not the extreme tail). Red = contributing pixels, cyan ellipse + center `+`, orange online `×`."""
+def show_below_diagonal_examples(dates, k=6, n=1000, high=50.0, pct=(85, 97), cols=3):
+    """Full-frame example open frames where the online centroid sits below the diagonal (online <
+    ellipse in both x and y) by a MODERATE amount (|discrepancy| in the `pct` percentile band, not
+    the extreme tail). Full frame is shown so that contributing pixels OUTSIDE the pupil are visible.
+    Red = contributing pixels, cyan ellipse + center `+`, orange online `×`."""
     if isinstance(dates, str): dates = [dates]
     cand, mags = [], []
     for d in dates:
@@ -607,21 +608,18 @@ def show_below_diagonal_examples(dates, k=6, n=1000, high=50.0, pct=(85, 97), co
     idx = np.linspace(0, len(band)-1, min(k, len(band))).astype(int)
     picks = [band[i] for i in idx]
     rows = int(np.ceil(len(picks)/cols))
-    fig, axes = plt.subplots(rows, cols, figsize=(cols*3.2, rows*3.0), squeeze=False)
+    fig, axes = plt.subplots(rows, cols, figsize=(cols*3.6, rows*2.9), squeeze=False)
     for ax, (mag, s, t, dx, dy) in zip(axes.ravel(), picks):
-        g = grab_frame(s, t); e = detect_pupil_ellipse(g)
-        (cx, cy), (MA, ma), ang = e
-        x0, y0 = int(cx-crop), int(cy-crop); x1, y1 = int(cx+crop), int(cy+crop)
+        g = grab_frame(s, t); e = detect_pupil_ellipse(g); (cx, cy), (MA, ma), ang = e
         ax.imshow(g, cmap="gray", vmin=0, vmax=255)
         ax.imshow(_mask_overlay_rgba(online_mask(g, 0.0, high)))
-        ax.add_patch(Ellipse((cx, cy), MA, ma, angle=ang, fill=False, ec=C_ROBUST, lw=1.5))
-        ax.plot(cx, cy, "+", c=C_ROBUST, ms=13, mew=2)
-        ox, oy = get_pupil_online(g, 0.0, high); ax.plot(ox, oy, "x", c=C_ONLINE, ms=13, mew=2)
-        ax.set_xlim(x0, x1); ax.set_ylim(y1, y0); ax.set_xticks([]); ax.set_yticks([])
-        ax.set_title(f"Δx={dx:+.1f} Δy={dy:+.1f} px", fontsize=8)
+        ax.add_patch(Ellipse((cx, cy), MA, ma, angle=ang, fill=False, ec=C_ROBUST, lw=1.3))
+        ax.plot(cx, cy, "+", c=C_ROBUST, ms=11, mew=2)
+        ox, oy = get_pupil_online(g, 0.0, high); ax.plot(ox, oy, "x", c=C_ONLINE, ms=11, mew=2)
+        ax.set_xticks([]); ax.set_yticks([]); ax.set_title(f"Δx={dx:+.1f} Δy={dy:+.1f} px", fontsize=8)
     for ax in axes.ravel()[len(picks):]:
         ax.axis("off")
-    fig.suptitle("Moderate below-diagonal frames (online centroid < ellipse center)", fontsize=10)
+    fig.suptitle("Moderate below-diagonal frames — contributing pixels (red) extend beyond the pupil", fontsize=10)
     plt.tight_layout(rect=[0, 0, 1, 0.97]); plt.show()
 
 def show_tracking_examples(dates, k=5, high=50.0, search=40, show_mask=True):

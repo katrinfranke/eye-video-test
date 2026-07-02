@@ -257,14 +257,15 @@ OPEN_MIN = 5000
 # assumption: 40 deg / vertical pupil range (~155 px). This also predicts ~70% horizontal coverage.
 DEG_PER_PX_X, DEG_PER_PX_Y = 0.26, 0.26
 
-def open_frames(r, min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):
+def open_frames(r, min_dark=None, max_dark=PIPELINE_MAX):
     """Boolean mask over r's detected frames: eye 'open' where the online dark-pixel count
     (ndark) is within [min_dark, max_dark]. Below min_dark = pupil occluded / eye closing."""
+    if min_dark is None: min_dark = OPEN_MIN
     if r["n"] == 0:
         return np.zeros(0, bool)
     return (r["ndark"] >= min_dark) & (r["ndark"] <= max_dark)
 
-def closed_fraction(dates, n=1000, high=50.0, min_dark=OPEN_MIN, max_dark=PIPELINE_MAX, landmarks=None):
+def closed_fraction(dates, n=1000, high=50.0, min_dark=None, max_dark=PIPELINE_MAX, landmarks=None):
     """Per session: fraction of sampled frames that are eye-closed / online-invalid. A frame counts
     as closed if no pupil was detected (dropped during tracking) OR its online dark-pixel count is
     outside [min_dark, max_dark]. Returns {date: dict(n_tried, n_open, closed_fraction)}."""
@@ -307,9 +308,10 @@ def show_pupil_sizes(dates, targets=None, n=1000, high=50.0, cols=5):
     plt.tight_layout(rect=[0, 0, 1, 0.96]); plt.show()
 
 def pupil_size_histogram(centered=None, biased=None, conditions=None, n=1000, high=50.0,
-                         bins=60, threshold=OPEN_MIN):
+                         bins=60, threshold=None):
     """One pooled histogram of pupil size (dark-pixel count) across all sessions, per condition
     (step, density), with the analysis threshold marked."""
+    if threshold is None: threshold = OPEN_MIN
     if conditions is None:
         conditions = {"centered": centered or [], "biased": biased or []}
     names = list(conditions)
@@ -327,9 +329,10 @@ def pupil_size_histogram(centered=None, biased=None, conditions=None, n=1000, hi
     plt.tight_layout(); plt.show()
 
 def pupil_size_distributions(centered=None, biased=None, conditions=None, n=1000, high=50.0,
-                             threshold=OPEN_MIN):
+                             threshold=None):
     """Per-session distribution of pupil size (dark-pixel count ndark), as violins colored by
     condition (log y), with a line at the analysis threshold."""
+    if threshold is None: threshold = OPEN_MIN
     if conditions is None:
         conditions = {"centered": centered or [], "biased": biased or []}
     names = list(conditions)
@@ -391,7 +394,7 @@ def discrepancy_vs_pupilsize(dates, n=1000, high=50.0, deg_per_px_x=DEG_PER_PX_X
             print(f"{a:>6}-{b if b<ND.max() else 'inf':>7}{m.sum():>7}{np.median(DEGX[m]):>11.3f}{np.median(DEGY[m]):>11.3f}")
 
 def compare_closure(centered=None, biased=None, conditions=None, n=1000, high=50.0,
-                    min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):
+                    min_dark=None, max_dark=PIPELINE_MAX):
     """Per-session eye-closed fraction, compared between conditions (strip plot + Welch t-test)."""
     if conditions is None:
         conditions = {"centered": centered or [], "biased": biased or []}
@@ -560,7 +563,7 @@ def plot_pupil_xy(date, n=1000, high=50.0):
     plt.tight_layout(); plt.show()
     return r
 
-def tracker_agreement(dates, n=120, high=50.0, open_only=True, min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):
+def tracker_agreement(dates, n=120, high=50.0, open_only=True, min_dark=None, max_dark=PIPELINE_MAX):
     """Scatter the two trackers against each other per frame (open frames only by default):
     ellipse-x vs online-x and ellipse-y vs online-y (dashed = identity). Tight scatter on the
     line = the online centroid faithfully follows the pupil."""
@@ -850,7 +853,7 @@ def _group_test(groups):
     return "one-way ANOVA", float(s), float(p)
 
 def compare_agreement(centered=None, biased=None, conditions=None, n=120, high=50.0, bins=50,
-                      open_only=True, min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):
+                      open_only=True, min_dark=None, max_dark=PIPELINE_MAX):
     """Per condition, compare the two trackers directly: ellipse-x vs online-x and
     ellipse-y vs online-y scatter (dashed = identity), plus the discrepancy
     delta = online - ellipse. If delta differs between conditions, a tracker artifact
@@ -903,7 +906,7 @@ def compare_agreement(centered=None, biased=None, conditions=None, n=120, high=5
 
 def compare_conditions(centered=None, biased=None, conditions=None,
                        n=120, high=50.0, bins=60, summary="mean", landmarks=None,
-                       open_only=True, min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):
+                       open_only=True, min_dark=None, max_dark=PIPELINE_MAX):
     """Compare eye-frame pupil position between conditions, for both trackers and both axes
     (u = horizontal / eye-frame x, v = vertical / eye-frame y).
 

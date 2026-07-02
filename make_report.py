@@ -9,7 +9,8 @@ import eyevideo as ev
 
 ev.ANIMAL_DIR = "/mnt/at-storageB1_I/EyeVideo/AT-B1NO1"
 N = 1000
-HIGH = 50.0
+HIGH = 50.0            # booth 1
+ev.OPEN_MIN = 5000     # booth-1 openness threshold (from the pupil-size histogram)
 centered = ['2026-05-27', '2026-04-30', '2026-06-11', '2026-06-09', '2026-03-02', '2026-02-04', '2026-02-13']
 biased   = ['2026-06-04', '2026-05-20', '2026-05-12', '2026-04-17', '2026-03-19', '2026-04-13', '2026-04-07']
 EX = [centered[0], centered[3], biased[0], biased[3]]

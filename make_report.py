@@ -45,6 +45,9 @@ plt.savefig(f"{FIG}/tracker_agreement.png", dpi=110, bbox_inches="tight"); plt.c
 # example frames of moderate below-diagonal discrepancy
 ev.show_below_diagonal_examples(centered + biased, k=6)
 plt.savefig(f"{FIG}/discrepancy_examples.png", dpi=110, bbox_inches="tight"); plt.close("all")
+# distribution of on-screen error in degrees
+ev.error_degrees_violin(centered + biased, n=N, high=HIGH)
+plt.savefig(f"{FIG}/error_degrees_violin.png", dpi=110, bbox_inches="tight"); plt.close("all")
 ex, ox2, ey, oy2 = [], [], [], []
 for d in centered + biased:
     r = ev.track_both(ev.session_for_date(d), N, HIGH); sel = ev.open_frames(r)

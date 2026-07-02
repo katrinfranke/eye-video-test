@@ -38,7 +38,7 @@ Both conditions peak near ~9000; only ~1% of detected frames fall below the 5000
 
 ![Frames across pupil size](figures/pupil_sizes.png)
 
-Online-vs-offline discrepancy converted to on-screen error (degrees visual angle) vs pupil size confirms the threshold: the error bottoms out at ~0.13–0.2° for `ndark` ≈ 5000–10000 and rises steeply below ~5000 (occlusion) and, more mildly, above ~14000 (excess dark material). Points = median per bin; error bars = 25–75th percentile; horizontal (gray, 0.31°/px), vertical (blue, 0.26°/px).
+Online-vs-offline discrepancy converted to on-screen error (degrees visual angle) vs pupil size confirms the threshold: the error bottoms out at ~0.13–0.2° for `ndark` ≈ 5000–10000 and rises steeply below ~5000 (occlusion) and, more mildly, above ~14000 (excess dark material). Points = median per bin; error bars = 25–75th percentile; gain 0.26°/px (horizontal gray, vertical blue).
 
 ![Discrepancy vs pupil size](figures/discrepancy_vs_pupilsize.png)
 
@@ -57,7 +57,9 @@ Robust ellipse vs online centroid, pooled over all sessions (open frames):
 
 ![Robust vs online agreement](figures/tracker_agreement.png)
 
-**On-screen impact.** At 1 m viewing, screen ≈ 70°×40°, with gaze spanning ~85% width / full height, the pupil sweeps ~192 px horizontally and ~155 px vertically → gain ≈ **0.31°per pupil-px (horizontal)**, **0.26°per pupil-px (vertical)**. So the measured ~0.7–1 px online–offline disagreement is ≈ **0.2–0.3°of visual angle**; a hypothetical 5-px error would be ≈ 1.3–1.5°. (Errors scale inversely with assumed gaze coverage.)
+**On-screen impact.** At 1 m viewing, screen ≈ 70°×40°. Assuming the animal scans the full 40° height, the vertical pupil range (~155 px) gives an isotropic gain of **≈ 0.26°per pupil-px** — which in turn implies the gaze covers **~70% of screen width** (~49° of 70°; consistent across sessions, 65–74%). Converting the discrepancy to degrees, the **distribution of on-screen error** (violins below, open frames) has median **0.22°(horizontal) / 0.17°(vertical)** and 95th percentile ~2.9° / 2.0°. A hypothetical 5-px error would be ≈ 1.3°.
+
+![On-screen error distribution](figures/error_degrees_violin.png)
 
 **Where they disagree.** The scatter sits slightly below the diagonal (online < ellipse in 61% of frames in x, 64% in y; mean Δ ≈ −2 px / −1 px). Example frames of moderate below-diagonal discrepancy (both axes, 85–97th percentile of |Δ|), shown full-frame, reveal the cause: the online centroid is the mean of **all** thresholded dark pixels, and 4–12% of them lie *outside* the pupil — dark pixels along the upper eyelid margin, iris shadow, and lash line (mostly above the pupil). Those asymmetric extra pixels pull the online centroid (orange ×) up-and-left of the geometric pupil center the ellipse fits (cyan +), producing the systematic below-diagonal offset (~1–2 px ≈ 0.3–0.5°). It is structured, not random, and would be removed by restricting the centroid to the pupil region.
 

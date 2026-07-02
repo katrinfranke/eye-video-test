@@ -253,9 +253,9 @@ def track_dates(dates, n=200, high=50.0):
 PIPELINE_MIN, PIPELINE_MAX = 300, 40000
 OPEN_MIN = 5000
 
-# on-screen gain: degrees of visual angle per pupil-image pixel. From 1 m viewing, ~70x40 deg
-# screen, gaze spanning ~85% width / full height, and the measured pupil motion range.
-DEG_PER_PX_X, DEG_PER_PX_Y = 0.31, 0.26
+# on-screen gain: degrees of visual angle per pupil-image pixel. Isotropic, from the full-height
+# assumption: 40 deg / vertical pupil range (~155 px). This also predicts ~70% horizontal coverage.
+DEG_PER_PX_X, DEG_PER_PX_Y = 0.26, 0.26
 
 def open_frames(r, min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):
     """Boolean mask over r's detected frames: eye 'open' where the online dark-pixel count
@@ -588,6 +588,33 @@ def tracker_agreement(dates, n=120, high=50.0, open_only=True, min_dark=OPEN_MIN
         rx = np.corrcoef(ell[:, 0], onl[:, 0])[0, 1]; ry = np.corrcoef(ell[:, 1], onl[:, 1])[0, 1]
         mdx = np.median(np.abs(ell[:, 0] - onl[:, 0])); mdy = np.median(np.abs(ell[:, 1] - onl[:, 1]))
         print(f"{d}: corr x={rx:.3f} y={ry:.3f}  median|Δx|={mdx:.1f}px |Δy|={mdy:.1f}px  n={len(ell)}")
+
+def error_degrees_violin(dates, n=1000, high=50.0, screen_deg_v=40.0):
+    """Distribution (violins) of the online-offline on-screen error in degrees, on open frames.
+    Per-session isotropic gain = screen_deg_v / vertical pupil range (full-height assumption).
+    Horizontal (gray), vertical (blue)."""
+    if isinstance(dates, str): dates = [dates]
+    EX, EY = [], []
+    for d in dates:
+        r = track_both(session_for_date(d), n, high); sel = open_frames(r)
+        ell = r["ell"][sel]; onl = r["onl"][sel]
+        yr = np.percentile(ell[:, 1], 97.5) - np.percentile(ell[:, 1], 2.5)
+        g = screen_deg_v / yr
+        EX += list(np.abs(onl[:, 0]-ell[:, 0])*g); EY += list(np.abs(onl[:, 1]-ell[:, 1])*g)
+    EX, EY = np.array(EX), np.array(EY)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    parts = ax.violinplot([EX, EY], showmedians=True, widths=0.8)
+    for b, c in zip(parts["bodies"], ["gray", "tab:blue"]):
+        b.set_facecolor(c); b.set_alpha(0.5); b.set_edgecolor(c)
+    for key in ("cmedians", "cbars", "cmins", "cmaxes"):
+        parts[key].set_color("0.3"); parts[key].set_linewidth(0.9)
+    ax.set_xticks([1, 2]); ax.set_xticklabels(["horizontal", "vertical"])
+    ax.set_ylabel("on-screen error (° visual angle)")
+    ax.set_ylim(0, np.percentile(np.concatenate([EX, EY]), 99))
+    ax.set_title("Online−offline error distribution (open frames)")
+    plt.tight_layout(); plt.show()
+    print(f"median error: horizontal {np.median(EX):.3f}°, vertical {np.median(EY):.3f}°")
+    print(f"95th pct:     horizontal {np.percentile(EX,95):.2f}°, vertical {np.percentile(EY,95):.2f}°")
 
 def show_below_diagonal_examples(dates, k=6, n=1000, high=50.0, pct=(85, 97), cols=3):
     """Full-frame example open frames where the online centroid sits below the diagonal (online <

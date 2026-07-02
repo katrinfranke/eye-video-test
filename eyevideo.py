@@ -330,6 +330,42 @@ def pupil_size_distributions(centered=None, biased=None, conditions=None, n=1000
     ax.set_title("Per-session pupil-size distribution (black=centered, red=biased)")
     plt.tight_layout(); plt.show()
 
+def discrepancy_vs_pupilsize(dates, n=1000, high=50.0, screen_px_per_pupil_px=None):
+    """Median |online - offline| discrepancy (image px) vs pupil size (ndark), pooled over dates.
+    If screen_px_per_pupil_px (the calibration gain) is given, a second y-axis shows the implied
+    on-screen gaze error."""
+    if isinstance(dates, str): dates = [dates]
+    ND, DX, DY = [], [], []
+    for d in dates:
+        r = track_both(session_for_date(d), n, high)
+        ND += list(r["ndark"]); DX += list(np.abs(r["onl"][:, 0] - r["ell"][:, 0]))
+        DY += list(np.abs(r["onl"][:, 1] - r["ell"][:, 1]))
+    ND, DX, DY = np.array(ND), np.array(DX), np.array(DY)
+    edges = [0, 500, 1000, 2000, 4000, 8000, 16000, ND.max() + 1]
+    cx, mdx, mdy, iqx = [], [], [], []
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (ND >= lo) & (ND < hi)
+        if m.sum() >= 3:
+            cx.append(np.sqrt(lo * max(hi, lo + 1)) if lo > 0 else 250)
+            mdx.append(np.median(DX[m])); mdy.append(np.median(DY[m]))
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(cx, mdx, "o-", color="tab:blue", label="|Δx| (horizontal)")
+    ax.plot(cx, mdy, "s-", color="tab:orange", label="|Δy| (vertical)")
+    ax.axvline(OPEN_MIN, color="k", ls="--", lw=1, label=f"threshold {OPEN_MIN}")
+    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xlabel("pupil size (dark-pixel count, ndark)")
+    ax.set_ylabel("median |online − offline| (image px)")
+    ax.set_title("Tracker discrepancy vs pupil size")
+    if screen_px_per_pupil_px:
+        ax2 = ax.twinx(); ax2.set_yscale("log"); ax2.set_ylim(*[y*screen_px_per_pupil_px for y in ax.get_ylim()])
+        ax2.set_ylabel(f"implied screen error (px @ {screen_px_per_pupil_px:g} screen-px/pupil-px)")
+    ax.legend(fontsize=8); plt.tight_layout(); plt.show()
+    print(f"{'ndark bin':<14}{'n':>7}{'med|dx|':>9}{'med|dy|':>9}")
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (ND >= lo) & (ND < hi)
+        if m.sum():
+            print(f"{lo:>6}-{hi if hi<ND.max() else 'inf':>6}{m.sum():>7}{np.median(DX[m]):>9.2f}{np.median(DY[m]):>9.2f}")
+
 def compare_closure(centered=None, biased=None, conditions=None, n=1000, high=50.0,
                     min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):
     """Per-session eye-closed fraction, compared between conditions (strip plot + Welch t-test)."""

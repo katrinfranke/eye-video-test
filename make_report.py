@@ -42,6 +42,9 @@ log("pupil-size figures done")
 # offline vs online agreement (open frames)
 ev.tracker_agreement(centered + biased, n=N, high=HIGH)
 plt.savefig(f"{FIG}/tracker_agreement.png", dpi=110, bbox_inches="tight"); plt.close("all")
+# example frames of moderate below-diagonal discrepancy
+ev.show_below_diagonal_examples(centered + biased, k=6)
+plt.savefig(f"{FIG}/discrepancy_examples.png", dpi=110, bbox_inches="tight"); plt.close("all")
 ex, ox2, ey, oy2 = [], [], [], []
 for d in centered + biased:
     r = ev.track_both(ev.session_for_date(d), N, HIGH); sel = ev.open_frames(r)

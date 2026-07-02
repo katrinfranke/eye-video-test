@@ -59,6 +59,10 @@ Robust ellipse vs online centroid, pooled over all sessions (open frames):
 
 **On-screen impact.** At 1 m viewing, screen ≈ 70°×40°, with gaze spanning ~85% width / full height, the pupil sweeps ~192 px horizontally and ~155 px vertically → gain ≈ **0.31°per pupil-px (horizontal)**, **0.26°per pupil-px (vertical)**. So the measured ~0.7–1 px online–offline disagreement is ≈ **0.2–0.3°of visual angle**; a hypothetical 5-px error would be ≈ 1.3–1.5°. (Errors scale inversely with assumed gaze coverage.)
 
+**Where they disagree.** The scatter sits slightly below the diagonal (online < ellipse in 61% of frames in x, 64% in y; mean Δ ≈ −2 px / −1 px). Example frames of moderate below-diagonal discrepancy (both axes, 85–97th percentile of |Δ|, zoomed) show the cause: the bright corneal reflection punches a **notch out of the dark-pixel mask** (red), so the online centroid (orange ×) is pulled away from the notch relative to the geometric pupil center the ellipse fits (cyan +). This is a small, systematic bias (~1–2 px ≈ 0.3–0.5°), not random error.
+
+![Below-diagonal example frames](figures/discrepancy_examples.png)
+
 ## Eye-frame position — centered vs biased
 
 Mean of the 7 per-session means, Welch t-test on those means (df ≈ 12):

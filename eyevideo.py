@@ -249,9 +249,13 @@ def track_dates(dates, n=200, high=50.0):
 
 # ---------------------------------------------------------------- eye closure / openness
 # dark-pixel-count thresholds. The online tracker's own validity range is [300, 40000]; for the
-# analysis we use a stricter "pupil sufficiently open" floor of 2000 (see figures/pupil_sizes.png).
+# analysis we use a stricter "pupil sufficiently open" floor (see figures/pupil_sizes.png).
 PIPELINE_MIN, PIPELINE_MAX = 300, 40000
-OPEN_MIN = 2000
+OPEN_MIN = 5000
+
+# on-screen gain: degrees of visual angle per pupil-image pixel. From 1 m viewing, ~70x40 deg
+# screen, gaze spanning ~85% width / full height, and the measured pupil motion range.
+DEG_PER_PX_X, DEG_PER_PX_Y = 0.31, 0.26
 
 def open_frames(r, min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):
     """Boolean mask over r's detected frames: eye 'open' where the online dark-pixel count
@@ -284,7 +288,7 @@ def show_pupil_sizes(dates, targets=None, n=1000, high=50.0, cols=5):
             pool.append((float(r["ndark"][i]), s, float(r["t"][i])))
     nd = np.array([p[0] for p in pool])
     if targets is None:
-        targets = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000]   # 500-px steps bracketing OPEN_MIN
+        targets = [1500, 3000, 4000, 5000, 6000, 7000, 9000, 12000]   # bracketing OPEN_MIN
     rows = int(np.ceil(len(targets) / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(cols*3.0, rows*2.7), squeeze=False)
     for ax, tg in zip(axes.ravel(), targets):
@@ -350,41 +354,41 @@ def pupil_size_distributions(centered=None, biased=None, conditions=None, n=1000
     ax.set_title("Per-session pupil-size distribution (black=centered, red=biased)")
     plt.tight_layout(); plt.show()
 
-def discrepancy_vs_pupilsize(dates, n=1000, high=50.0, screen_px_per_pupil_px=None):
-    """Median |online - offline| discrepancy (image px) vs pupil size (ndark), pooled over dates.
-    If screen_px_per_pupil_px (the calibration gain) is given, a second y-axis shows the implied
-    on-screen gaze error."""
+def discrepancy_vs_pupilsize(dates, n=1000, high=50.0, deg_per_px_x=DEG_PER_PX_X, deg_per_px_y=DEG_PER_PX_Y):
+    """Online-vs-offline discrepancy converted to estimated on-screen error (degrees visual angle)
+    vs pupil size (ndark), pooled over dates. Points = median per bin; error bars = 25-75th
+    percentile. Horizontal (gray) uses deg_per_px_x, vertical (blue) uses deg_per_px_y."""
     if isinstance(dates, str): dates = [dates]
     ND, DX, DY = [], [], []
     for d in dates:
         r = track_both(session_for_date(d), n, high)
         ND += list(r["ndark"]); DX += list(np.abs(r["onl"][:, 0] - r["ell"][:, 0]))
         DY += list(np.abs(r["onl"][:, 1] - r["ell"][:, 1]))
-    ND, DX, DY = np.array(ND), np.array(DX), np.array(DY)
-    edges = [0, 500, 1000, 2000, 4000, 8000, 16000, ND.max() + 1]
-    cx, mdx, mdy, iqx = [], [], [], []
-    for lo, hi in zip(edges[:-1], edges[1:]):
-        m = (ND >= lo) & (ND < hi)
-        if m.sum() >= 3:
-            cx.append(np.sqrt(lo * max(hi, lo + 1)) if lo > 0 else 250)
-            mdx.append(np.median(DX[m])); mdy.append(np.median(DY[m]))
+    ND = np.array(ND); DEGX = np.array(DX)*deg_per_px_x; DEGY = np.array(DY)*deg_per_px_y
+    edges = [0, 1000, 2000, 3500, 5000, 7000, 10000, 14000, ND.max() + 1]
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(cx, mdx, "o-", color="tab:blue", label="|Δx| (horizontal)")
-    ax.plot(cx, mdy, "s-", color="tab:orange", label="|Δy| (vertical)")
+    for deg, gain, color, mk, lab in [(DEGX, deg_per_px_x, "gray", "o", "horizontal"),
+                                      (DEGY, deg_per_px_y, "tab:blue", "s", "vertical")]:
+        cx, med, lo_e, hi_e = [], [], [], []
+        for a, b in zip(edges[:-1], edges[1:]):
+            m = (ND >= a) & (ND < b)
+            if m.sum() >= 5:
+                q25, q50, q75 = np.percentile(deg[m], [25, 50, 75])
+                cx.append(np.sqrt(a * b) if a > 0 else 700)
+                med.append(q50); lo_e.append(q50 - q25); hi_e.append(q75 - q50)
+        ax.errorbar(cx, med, yerr=[lo_e, hi_e], fmt=mk + "-", color=color, capsize=3,
+                    lw=1.5, label=f"{lab} ({gain:.2f}°/px)")
     ax.axvline(OPEN_MIN, color="k", ls="--", lw=1, label=f"threshold {OPEN_MIN}")
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_xlabel("pupil size (dark-pixel count, ndark)")
-    ax.set_ylabel("median |online − offline| (image px)")
-    ax.set_title("Tracker discrepancy vs pupil size")
-    if screen_px_per_pupil_px:
-        ax2 = ax.twinx(); ax2.set_yscale("log"); ax2.set_ylim(*[y*screen_px_per_pupil_px for y in ax.get_ylim()])
-        ax2.set_ylabel(f"implied screen error (px @ {screen_px_per_pupil_px:g} screen-px/pupil-px)")
+    ax.set_ylabel("estimated on-screen error (° visual angle)")
+    ax.set_title("Online−offline discrepancy vs pupil size")
     ax.legend(fontsize=8); plt.tight_layout(); plt.show()
-    print(f"{'ndark bin':<14}{'n':>7}{'med|dx|':>9}{'med|dy|':>9}")
-    for lo, hi in zip(edges[:-1], edges[1:]):
-        m = (ND >= lo) & (ND < hi)
+    print(f"{'ndark bin':<16}{'n':>7}{'med_x(deg)':>11}{'med_y(deg)':>11}")
+    for a, b in zip(edges[:-1], edges[1:]):
+        m = (ND >= a) & (ND < b)
         if m.sum():
-            print(f"{lo:>6}-{hi if hi<ND.max() else 'inf':>6}{m.sum():>7}{np.median(DX[m]):>9.2f}{np.median(DY[m]):>9.2f}")
+            print(f"{a:>6}-{b if b<ND.max() else 'inf':>7}{m.sum():>7}{np.median(DEGX[m]):>11.3f}{np.median(DEGY[m]):>11.3f}")
 
 def compare_closure(centered=None, biased=None, conditions=None, n=1000, high=50.0,
                     min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):

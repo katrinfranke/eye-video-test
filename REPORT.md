@@ -34,25 +34,25 @@ Pooled pupil-size (`ndark`) distribution across sessions, per condition (step, d
 
 ![Pupil-size distribution](figures/pupil_size_histogram.png)
 
-Both conditions peak near ~9000 with almost no mass below 2000. Example frames across `ndark` (500-px steps) show why: below ~2000 the pupil is barely emerging (eye half-closed); by ~2500+ it is clearly open.
+Both conditions peak near ~9000; only ~1% of detected frames fall below the 5000 threshold. Example frames across `ndark` show why: below ~5000 the pupil is small/partly occluded; above it the pupil is clearly open.
 
 ![Frames across pupil size](figures/pupil_sizes.png)
 
-Tracker agreement as a function of pupil size confirms the choice of threshold: the median |online − offline| discrepancy is ~0.6–1 px for `ndark` ≳ 2000 but rises steeply below it (occlusion) and, to a lesser degree, above ~16000 (excess dark material).
+Online-vs-offline discrepancy converted to on-screen error (degrees visual angle) vs pupil size confirms the threshold: the error bottoms out at ~0.13–0.2° for `ndark` ≈ 5000–10000 and rises steeply below ~5000 (occlusion) and, more mildly, above ~14000 (excess dark material). Points = median per bin; error bars = 25–75th percentile; horizontal (gray, 0.31°/px), vertical (blue, 0.26°/px).
 
 ![Discrepancy vs pupil size](figures/discrepancy_vs_pupilsize.png)
 
-**Threshold: `ndark > 2000`.** All analyses below use only frames above it (this removes 0.1–0.9% of *detected* frames — the distribution is bimodal, so the threshold mainly formalizes exclusion of already-undetected closed frames).
+**Threshold: `ndark > 5000`.** All analyses below use only frames above it (this removes ~0.7% of centered and ~1.6% of biased *detected* frames; the distribution is bimodal, so the threshold mainly formalizes exclusion of near-closed frames).
 
 ---
 
-# Part B — analysis (frames with `ndark > 2000`)
+# Part B — analysis (frames with `ndark > 5000`)
 
 ## Offline vs online agreement
 
 Robust ellipse vs online centroid, pooled over all sessions (open frames):
 
-- correlation: `x` r = 0.996, `y` r = 0.997
+- correlation: `x` r = 0.997, `y` r = 0.997
 - median |online − offline|: `x` = 0.87 px, `y` = 0.67 px; per-session r = 0.98–1.00.
 
 ![Robust vs online agreement](figures/tracker_agreement.png)
@@ -65,10 +65,10 @@ Mean of the 7 per-session means, Welch t-test on those means (df ≈ 12):
 
 | tracker | axis | centered | biased | t | p |
 |---|---|---:|---:|---:|---:|
-| robust | u (horizontal) | −0.068 | −0.107 | 3.01 | **0.0114** |
-| robust | v (vertical) | −0.056 | −0.048 | −0.43 | 0.675 |
-| online | u (horizontal) | −0.074 | −0.116 | 2.92 | **0.0137** |
-| online | v (vertical) | −0.062 | −0.056 | −0.28 | 0.784 |
+| robust | u (horizontal) | −0.068 | −0.107 | 3.05 | **0.0106** |
+| robust | v (vertical) | −0.056 | −0.047 | −0.46 | 0.657 |
+| online | u (horizontal) | −0.074 | −0.116 | 2.94 | **0.0132** |
+| online | v (vertical) | −0.061 | −0.055 | −0.32 | 0.757 |
 
 Biased days sit ~0.04 more negative in `u`, consistent across both trackers; horizontal only (Cohen's d ≈ 1.6). Using all detected frames (no threshold) gives the same result (robust u p = 0.012, online u p = 0.014). Tracker rows are not independent (r = 0.99).
 
@@ -88,8 +88,8 @@ Per-session mean pupil `x` (open frames):
 
 | measure | biased − centered | Welch p |
 |---|---:|---:|
-| raw image x / frame-width | −0.010 | 0.514 |
-| eye-frame `u` (robust) | −0.039 | 0.0114 |
+| raw image x / frame-width | −0.010 | 0.512 |
+| eye-frame `u` (robust) | −0.039 | 0.0106 |
 
 The between-condition difference appears in the pupil position referenced to the eye, not in raw normalized image x (which is confounded by per-session crop/resolution).
 
@@ -99,38 +99,38 @@ The between-condition difference appears in the pupil position referenced to the
 
 | condition | date | u_rob | v_rob | u_onl | v_onl | n |
 |---|---|---:|---:|---:|---:|---:|
-| centered | 2026-05-27 | −0.047 | −0.032 | −0.046 | −0.037 | 976 |
-| centered | 2026-04-30 | −0.098 | −0.060 | −0.101 | −0.066 | 963 |
-| centered | 2026-06-11 | −0.079 | −0.127 | −0.082 | −0.131 | 959 |
-| centered | 2026-06-09 | −0.068 | +0.011 | −0.072 | +0.011 | 963 |
-| centered | 2026-03-02 | −0.089 | −0.089 | −0.103 | −0.090 | 639 |
-| centered | 2026-02-04 | −0.053 | −0.059 | −0.064 | −0.077 | 964 |
-| centered | 2026-02-13 | −0.044 | −0.036 | −0.047 | −0.041 | 982 |
-| biased | 2026-06-04 | −0.082 | −0.067 | −0.089 | −0.076 | 970 |
-| biased | 2026-05-20 | −0.118 | −0.070 | −0.118 | −0.077 | 954 |
-| biased | 2026-05-12 | −0.070 | −0.080 | −0.072 | −0.087 | 984 |
-| biased | 2026-04-17 | −0.146 | −0.026 | −0.158 | −0.038 | 949 |
-| biased | 2026-03-19 | −0.100 | −0.021 | −0.116 | −0.028 | 965 |
-| biased | 2026-04-13 | −0.102 | −0.054 | −0.108 | −0.058 | 984 |
-| biased | 2026-04-07 | −0.132 | −0.015 | −0.152 | −0.028 | 976 |
+| centered | 2026-05-27 | −0.047 | −0.032 | −0.046 | −0.037 | 970 |
+| centered | 2026-04-30 | −0.098 | −0.060 | −0.100 | −0.066 | 959 |
+| centered | 2026-06-11 | −0.079 | −0.127 | −0.082 | −0.130 | 949 |
+| centered | 2026-06-09 | −0.068 | +0.012 | −0.072 | +0.012 | 961 |
+| centered | 2026-03-02 | −0.089 | −0.090 | −0.103 | −0.091 | 634 |
+| centered | 2026-02-04 | −0.053 | −0.059 | −0.064 | −0.078 | 957 |
+| centered | 2026-02-13 | −0.044 | −0.035 | −0.048 | −0.040 | 972 |
+| biased | 2026-06-04 | −0.083 | −0.068 | −0.090 | −0.077 | 964 |
+| biased | 2026-05-20 | −0.117 | −0.069 | −0.117 | −0.076 | 940 |
+| biased | 2026-05-12 | −0.070 | −0.081 | −0.072 | −0.087 | 973 |
+| biased | 2026-04-17 | −0.146 | −0.027 | −0.157 | −0.039 | 935 |
+| biased | 2026-03-19 | −0.100 | −0.015 | −0.118 | −0.021 | 924 |
+| biased | 2026-04-13 | −0.102 | −0.053 | −0.108 | −0.058 | 977 |
+| biased | 2026-04-07 | −0.132 | −0.015 | −0.151 | −0.027 | 961 |
 
 ## Conclusion
 
-Horizontal pupil position in eye-based coordinates is shifted on biased days relative to centered days (robust t = 3.01, p = 0.011; online t = 2.92, p = 0.014); vertical is unchanged. The shift is present in **both** the offline and online estimates (per-frame r = 0.99), and on valid frames the two disagree by only ~0.7–1 px (≈ 0.2–0.3°). The day-to-day difference therefore reflects a **real shift in horizontal pupil position within the eye**, seen regardless of tracker, not an artifact of the online pupil-detection step. Provided the gaze calibration is accurate, the estimated monitor gaze coordinates reflect this real shift.
+Horizontal pupil position in eye-based coordinates is shifted on biased days relative to centered days (robust t = 3.05, p = 0.011; online t = 2.94, p = 0.013); vertical is unchanged. The shift is present in **both** the offline and online estimates (per-frame r = 0.99), and on valid frames the two disagree by only ~0.7–1 px (≈ 0.2–0.3°). The day-to-day difference therefore reflects a **real shift in horizontal pupil position within the eye**, seen regardless of tracker, not an artifact of the online pupil-detection step. Provided the gaze calibration is accurate, the estimated monitor gaze coordinates reflect this real shift.
 
 ## Limitations
 
 - Session as unit: n = 7 per condition. The horizontal effect is significant (p = 0.011, d ≈ 1.6); the vertical null is not proof of no vertical effect at this n.
 - `u`/`v` are normalized per session by that session's landmark extent — depends on landmark placement consistency (verify with `show_landmarks(date)`).
 - On-screen degree estimate assumes ~85% width / full height gaze coverage; it scales inversely with the true coverage. Exact conversion needs the calibration mapping.
-- Openness threshold `ndark > 2000` (the online tracker's own floor is 300).
+- Openness threshold `ndark > 5000` (the online tracker's own floor is 300).
 
 ## Reproduce
 
 ```python
 import eyevideo as ev
 ev.ANIMAL_DIR = "/mnt/at-storageB1_I/EyeVideo/AT-B1NO1"
-ev.OPEN_MIN = 2000          # pupil-size (dark-pixel) openness floor for all comparisons
+ev.OPEN_MIN = 5000          # pupil-size (dark-pixel) openness floor for all comparisons
 # python make_report.py     # tracks all sessions at N=1000 (cached), writes results.json + figures/
 ```
 Landmarks: `eye_landmarks.json`. Tracking cache: `.track_cache/` (regenerated on demand).

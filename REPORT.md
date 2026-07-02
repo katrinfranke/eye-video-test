@@ -57,7 +57,7 @@ Robust ellipse vs online centroid, pooled over all sessions (open frames):
 
 ![Robust vs online agreement](figures/tracker_agreement.png)
 
-**On-screen impact.** At 1 m viewing, screen ≈ 70°×40°. Assuming the animal scans the full 40° height, the vertical pupil range (~155 px) gives an isotropic gain of **≈ 0.26°per pupil-px** — which in turn implies the gaze covers **~70% of screen width** (~49° of 70°; consistent across sessions, 65–74%). Converting the discrepancy to degrees, the **distribution of on-screen error** (violins below, open frames) has median **0.22°(horizontal) / 0.17°(vertical)** and 95th percentile ~2.9° / 2.0°. A hypothetical 5-px error would be ≈ 1.3°.
+**On-screen impact.** At 1 m viewing, screen ≈ 70°×40°. Assuming the animal scans the full 40° height, the vertical pupil range (~155 px) gives an isotropic gain of **≈ 0.26°per pupil-px** — which in turn implies the gaze covers **~70% of screen width** (~49° of 70°; consistent across sessions, 65–74%). Converting the discrepancy to degrees, the **distribution of on-screen error** (violins + jittered subset, open frames) is tight at the median — **0.22°(horizontal) / 0.17°(vertical)** — but has a non-trivial tail: **~21% / 11% of frames exceed 1°, and ~10% / 5% exceed 2°** (horizontal / vertical). So typical frames agree to ~0.2°, but a minority disagree by >1–2° (the below-diagonal peri-pupil-pixel effect above).
 
 ![On-screen error distribution](figures/error_degrees_violin.png)
 

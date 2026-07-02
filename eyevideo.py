@@ -589,10 +589,10 @@ def tracker_agreement(dates, n=120, high=50.0, open_only=True, min_dark=OPEN_MIN
         mdx = np.median(np.abs(ell[:, 0] - onl[:, 0])); mdy = np.median(np.abs(ell[:, 1] - onl[:, 1]))
         print(f"{d}: corr x={rx:.3f} y={ry:.3f}  median|Δx|={mdx:.1f}px |Δy|={mdy:.1f}px  n={len(ell)}")
 
-def error_degrees_violin(dates, n=1000, high=50.0, screen_deg_v=40.0):
-    """Distribution (violins) of the online-offline on-screen error in degrees, on open frames.
-    Per-session isotropic gain = screen_deg_v / vertical pupil range (full-height assumption).
-    Horizontal (gray), vertical (blue)."""
+def error_degrees_violin(dates, n=1000, high=50.0, screen_deg_v=40.0, n_points=600, seed=0):
+    """Distribution (violins + jittered random subset of points) of the online-offline on-screen
+    error in degrees, on open frames. Per-session isotropic gain = screen_deg_v / vertical pupil
+    range (full-height assumption). Horizontal (gray), vertical (blue)."""
     if isinstance(dates, str): dates = [dates]
     EX, EY = [], []
     for d in dates:
@@ -602,19 +602,31 @@ def error_degrees_violin(dates, n=1000, high=50.0, screen_deg_v=40.0):
         g = screen_deg_v / yr
         EX += list(np.abs(onl[:, 0]-ell[:, 0])*g); EY += list(np.abs(onl[:, 1]-ell[:, 1])*g)
     EX, EY = np.array(EX), np.array(EY)
-    fig, ax = plt.subplots(figsize=(6, 5))
-    parts = ax.violinplot([EX, EY], showmedians=True, widths=0.8)
+    fig, ax = plt.subplots(figsize=(6.5, 5.5))
+    parts = ax.violinplot([EX, EY], showmedians=True, widths=0.85)
     for b, c in zip(parts["bodies"], ["gray", "tab:blue"]):
-        b.set_facecolor(c); b.set_alpha(0.5); b.set_edgecolor(c)
+        b.set_facecolor(c); b.set_alpha(0.35); b.set_edgecolor(c)
     for key in ("cmedians", "cbars", "cmins", "cmaxes"):
         parts[key].set_color("0.3"); parts[key].set_linewidth(0.9)
+    rng = np.random.RandomState(seed)
+    for i, (E, c) in enumerate([(EX, "gray"), (EY, "tab:blue")], start=1):
+        idx = rng.choice(len(E), min(n_points, len(E)), replace=False)
+        ax.scatter(i + rng.uniform(-0.13, 0.13, len(idx)), E[idx], s=6, color=c,
+                   alpha=0.25, edgecolors="none", zorder=3)
+    hi = np.percentile(np.concatenate([EX, EY]), 99.5)
+    ax.set_ylim(0, hi)
     ax.set_xticks([1, 2]); ax.set_xticklabels(["horizontal", "vertical"])
     ax.set_ylabel("on-screen error (° visual angle)")
-    ax.set_ylim(0, np.percentile(np.concatenate([EX, EY]), 99))
-    ax.set_title("Online−offline error distribution (open frames)")
+    ax.set_title(f"Online−offline error distribution (open frames; {len(EX)} frames, {min(n_points,len(EX))} shown)")
+    txt = (f"> 0.5°: {100*(EX>0.5).mean():.0f}% / {100*(EY>0.5).mean():.0f}%\n"
+           f"> 1.0°: {100*(EX>1).mean():.0f}% / {100*(EY>1).mean():.0f}%\n"
+           f"> 2.0°: {100*(EX>2).mean():.0f}% / {100*(EY>2).mean():.0f}%")
+    ax.text(0.97, 0.97, "horiz / vert exceeding:\n"+txt, transform=ax.transAxes,
+            ha="right", va="top", fontsize=8, bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.9))
     plt.tight_layout(); plt.show()
-    print(f"median error: horizontal {np.median(EX):.3f}°, vertical {np.median(EY):.3f}°")
-    print(f"95th pct:     horizontal {np.percentile(EX,95):.2f}°, vertical {np.percentile(EY,95):.2f}°")
+    print(f"median: horiz {np.median(EX):.3f}° vert {np.median(EY):.3f}°  |  "
+          f">1°: horiz {100*(EX>1).mean():.1f}% vert {100*(EY>1).mean():.1f}%  |  "
+          f">2°: horiz {100*(EX>2).mean():.1f}% vert {100*(EY>2).mean():.1f}%")
 
 def show_below_diagonal_examples(dates, k=6, n=1000, high=50.0, pct=(85, 97), cols=3):
     """Full-frame example open frames where the online centroid sits below the diagonal (online <

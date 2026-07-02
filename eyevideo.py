@@ -302,6 +302,26 @@ def show_pupil_sizes(dates, targets=None, n=1000, high=50.0, cols=5):
                  f"analysis threshold = {OPEN_MIN}", fontsize=10)
     plt.tight_layout(rect=[0, 0, 1, 0.96]); plt.show()
 
+def pupil_size_histogram(centered=None, biased=None, conditions=None, n=1000, high=50.0,
+                         bins=60, threshold=OPEN_MIN):
+    """One pooled histogram of pupil size (dark-pixel count) across all sessions, per condition
+    (step, density), with the analysis threshold marked."""
+    if conditions is None:
+        conditions = {"centered": centered or [], "biased": biased or []}
+    names = list(conditions)
+    colors = {nm: COND_PALETTE[i % len(COND_PALETTE)] for i, nm in enumerate(names)}
+    nds = {nm: np.concatenate([track_both(session_for_date(d), n, high)["ndark"]
+                               for d in conditions[nm]]) for nm in names}
+    hi = np.percentile(np.concatenate(list(nds.values())), 99.5)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for nm in names:
+        ax.hist(nds[nm], bins=bins, range=(0, hi), histtype="step", lw=1.8,
+                density=True, color=colors[nm], label=nm)
+    ax.axvline(threshold, color="k", ls="--", lw=1, label=f"threshold = {threshold}")
+    ax.set_xlabel("pupil size (dark-pixel count, ndark)"); ax.set_ylabel("density")
+    ax.set_title("Pupil-size distribution across sessions"); ax.legend(fontsize=9)
+    plt.tight_layout(); plt.show()
+
 def pupil_size_distributions(centered=None, biased=None, conditions=None, n=1000, high=50.0,
                              threshold=OPEN_MIN):
     """Per-session distribution of pupil size (dark-pixel count ndark), as violins colored by
@@ -536,31 +556,34 @@ def plot_pupil_xy(date, n=1000, high=50.0):
     plt.tight_layout(); plt.show()
     return r
 
-def tracker_agreement(dates, n=120, high=50.0):
-    """Scatter the two trackers against each other per frame: ellipse-x vs online-x and
-    ellipse-y vs online-y (dashed = identity). Tight scatter on the line = the online
-    centroid faithfully follows the pupil."""
+def tracker_agreement(dates, n=120, high=50.0, open_only=True, min_dark=OPEN_MIN, max_dark=PIPELINE_MAX):
+    """Scatter the two trackers against each other per frame (open frames only by default):
+    ellipse-x vs online-x and ellipse-y vs online-y (dashed = identity). Tight scatter on the
+    line = the online centroid faithfully follows the pupil."""
     if isinstance(dates, str):
         dates = [dates]
-    data = [(d, track_both(session_for_date(d), n, high)) for d in dates]
-    data = [(d, r) for d, r in data if r["n"] > 0]
+    data = []
+    for d in dates:
+        r = track_both(session_for_date(d), n, high)
+        if r["n"] == 0:
+            continue
+        sel = open_frames(r, min_dark, max_dark) if open_only else np.ones(r["n"], bool)
+        data.append((d, r["ell"][sel], r["onl"][sel]))
     fig, ax = plt.subplots(1, 2, figsize=(11, 5))
     for j, lab in enumerate(["x", "y"]):
         vals = []
-        for d, r in data:
-            e = r["ell"][:, j]; o = r["onl"][:, j]
-            ax[j].scatter(e, o, s=8, alpha=0.3, color="tab:blue", edgecolors="none"); vals += list(e) + list(o)
+        for d, ell, onl in data:
+            ax[j].scatter(ell[:, j], onl[:, j], s=8, alpha=0.3, color="tab:blue", edgecolors="none")
+            vals += list(ell[:, j]) + list(onl[:, j])
         if vals:
             lo, hi = min(vals), max(vals); ax[j].plot([lo, hi], [lo, hi], "k--", lw=1)
         ax[j].set_xlabel(f"ellipse {lab} (px)"); ax[j].set_ylabel(f"online {lab} (px)")
         ax[j].set_title(f"pupil {lab}: robust vs online"); ax[j].set_aspect("equal", "box")
     plt.tight_layout(); plt.show()
-    for d, r in data:
-        rx = np.corrcoef(r["ell"][:, 0], r["onl"][:, 0])[0, 1]
-        ry = np.corrcoef(r["ell"][:, 1], r["onl"][:, 1])[0, 1]
-        mdx = np.median(np.abs(r["ell"][:, 0] - r["onl"][:, 0]))
-        mdy = np.median(np.abs(r["ell"][:, 1] - r["onl"][:, 1]))
-        print(f"{d}: corr x={rx:.3f} y={ry:.3f}  median|Δx|={mdx:.1f}px |Δy|={mdy:.1f}px  n={r['n']}")
+    for d, ell, onl in data:
+        rx = np.corrcoef(ell[:, 0], onl[:, 0])[0, 1]; ry = np.corrcoef(ell[:, 1], onl[:, 1])[0, 1]
+        mdx = np.median(np.abs(ell[:, 0] - onl[:, 0])); mdy = np.median(np.abs(ell[:, 1] - onl[:, 1]))
+        print(f"{d}: corr x={rx:.3f} y={ry:.3f}  median|Δx|={mdx:.1f}px |Δy|={mdy:.1f}px  n={len(ell)}")
 
 def show_tracking_examples(dates, k=5, high=50.0, search=40, show_mask=True):
     """Rows = dates, cols = k example open-eye frames. Overlays the online centroid-contributing

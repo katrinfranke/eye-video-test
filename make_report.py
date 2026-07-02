@@ -22,41 +22,36 @@ log(f"tracking {len(centered)+len(biased)} sessions at N={N} ...")
 ev.track_dates(centered + biased, n=N, high=HIGH)
 log("tracking done")
 
-# --- tracking quality ---
-# example frames with contributing pixels + ellipse/centroid
+# --- A. qualitative tracking inspection ---
 ev.show_tracking_examples(EX, k=5)
 plt.savefig(f"{FIG}/tracking_examples.png", dpi=110, bbox_inches="tight"); plt.close("all")
 ev.show_eyeframes(EX, n=N, cols=2)
 plt.savefig(f"{FIG}/eyeframe_coordinates.png", dpi=110, bbox_inches="tight"); plt.close("all")
-# robust vs online scatter + summary
-ev.tracker_agreement(centered + biased, n=N, high=HIGH)
-plt.savefig(f"{FIG}/tracker_agreement.png", dpi=110, bbox_inches="tight"); plt.close("all")
-allx_e, allx_o, ally_e, ally_o, dxs, dys = [], [], [], [], [], []
-for d in centered + biased:
-    r = ev.track_both(ev.session_for_date(d), N, HIGH)
-    allx_e += list(r["ell"][:, 0]); allx_o += list(r["onl"][:, 0])
-    ally_e += list(r["ell"][:, 1]); ally_o += list(r["onl"][:, 1])
-    dxs += list(r["onl"][:, 0] - r["ell"][:, 0]); dys += list(r["onl"][:, 1] - r["ell"][:, 1])
-agree = {"corr_x": float(np.corrcoef(allx_e, allx_o)[0, 1]),
-         "corr_y": float(np.corrcoef(ally_e, ally_o)[0, 1]),
-         "median_abs_dx_px": float(np.median(np.abs(dxs))),
-         "median_abs_dy_px": float(np.median(np.abs(dys)))}
 log("tracking-quality figures done")
 
-# --- pupil size / eye openness (after tracking quality) ---
-ev.pupil_size_distributions(centered, biased, n=N, high=HIGH)
-plt.savefig(f"{FIG}/pupil_size_distributions.png", dpi=110, bbox_inches="tight"); plt.close("all")
+# --- B. pupil size and threshold ---
+ev.pupil_size_histogram(centered, biased, n=N, high=HIGH)
+plt.savefig(f"{FIG}/pupil_size_histogram.png", dpi=110, bbox_inches="tight"); plt.close("all")
 ev.show_pupil_sizes(centered + biased, n=N, high=HIGH)
 plt.savefig(f"{FIG}/pupil_sizes.png", dpi=110, bbox_inches="tight"); plt.close("all")
-cf = {d: v["closed_fraction"] for d, v in ev.closed_fraction(centered + biased, n=N, high=HIGH).items()}
-ev.compare_closure(centered, biased, n=N, high=HIGH)
-plt.savefig(f"{FIG}/closure_fraction.png", dpi=110, bbox_inches="tight"); plt.close("all")
-_, ct, cp = ev._group_test([[cf[d] for d in centered], [cf[d] for d in biased]])
-closure = {"per_session": {d: cf[d] for d in centered + biased},
-           "centered_mean": float(np.mean([cf[d] for d in centered])),
-           "biased_mean": float(np.mean([cf[d] for d in biased])),
-           "welch_t": ct, "welch_p": cp, "open_min": ev.OPEN_MIN, "pipeline_min": ev.PIPELINE_MIN}
-log("pupil-size / closure figures done")
+ev.discrepancy_vs_pupilsize(centered + biased, n=N, high=HIGH)
+plt.savefig(f"{FIG}/discrepancy_vs_pupilsize.png", dpi=110, bbox_inches="tight"); plt.close("all")
+log("pupil-size figures done")
+
+# --- C. real analysis on open frames (ndark > OPEN_MIN) ---
+# offline vs online agreement (open frames)
+ev.tracker_agreement(centered + biased, n=N, high=HIGH)
+plt.savefig(f"{FIG}/tracker_agreement.png", dpi=110, bbox_inches="tight"); plt.close("all")
+ex, ox2, ey, oy2 = [], [], [], []
+for d in centered + biased:
+    r = ev.track_both(ev.session_for_date(d), N, HIGH); sel = ev.open_frames(r)
+    ex += list(r["ell"][sel, 0]); ox2 += list(r["onl"][sel, 0])
+    ey += list(r["ell"][sel, 1]); oy2 += list(r["onl"][sel, 1])
+ex, ox2, ey, oy2 = map(np.array, (ex, ox2, ey, oy2))
+agree = {"corr_x": float(np.corrcoef(ex, ox2)[0, 1]), "corr_y": float(np.corrcoef(ey, oy2)[0, 1]),
+         "median_abs_dx_px": float(np.median(np.abs(ex - ox2))),
+         "median_abs_dy_px": float(np.median(np.abs(ey - oy2)))}
+log("agreement (open frames) done")
 
 # --- eye-frame comparison on open frames (ndark > OPEN_MIN) ---
 res = ev.compare_conditions(centered, biased, n=N, high=HIGH, bins=60, summary="mean", open_only=True)
@@ -112,7 +107,6 @@ out = {
     "welch_allframes": welch_allframes,
     "tracker_agreement": agree,
     "image_vs_eyeframe": contrast,
-    "closure": closure,
 }
 json.dump(out, open("results.json", "w"), indent=2)
 log("wrote results.json and figures/. DONE")
